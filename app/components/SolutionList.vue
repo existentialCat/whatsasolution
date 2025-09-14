@@ -1,0 +1,182 @@
+<!-- components/SolutionList.vue -->
+<template>
+  <div>
+    <div v-if="solutions && solutions.length > 0">
+      <div v-for="(solution, index) in solutions" :key="solution.id" :id="`solution-${solution.id}`">
+        <v-card-text class="d-flex align-start pa-4">
+          <!-- Voting -->
+          <div class="d-flex flex-column align-center mr-4">
+            <v-btn icon variant="plain" :color="solution.user_vote === 'upvote' ? 'green' : 'grey'" :disabled="votingInProgress.has(solution.id)" @click.stop="handleVote(solution, 'upvote')">
+              <v-icon size="x-large">mdi-menu-up</v-icon>
+            </v-btn>
+            <div class="text-h6 font-weight-bold my-n2">{{ (solution.upvotes || 0) - (solution.downvotes || 0) }}</div>
+            <v-btn icon variant="plain" :color="solution.user_vote === 'downvote' ? 'red' : 'grey'" :disabled="votingInProgress.has(solution.id)" @click.stop="handleVote(solution, 'downvote')">
+              <v-icon size="x-large">mdi-menu-down</v-icon>
+            </v-btn>
+          </div>
+          <!-- Content -->
+          <div class="flex-grow-1" style="min-width: 0;">
+            <v-card class="solution-card" flat hover @click="navigateToSolution(solution.id)">
+              <v-card-title class="text-h6 pt-0 text-wrap">{{ solution.title }}</v-card-title>
+              <!-- This is the updated section: Username is now a link -->
+              <v-card-subtitle>
+                Submitted by: 
+                <NuxtLink :to="`/profile/${solution.submitted_by}`" @click.stop class="text-decoration-none">
+                    {{ solution.users?.username || 'Anonymous' }}
+                </NuxtLink>
+              </v-card-subtitle>
+              <v-card-text><p>{{ solution.description }}</p></v-card-text>
+            </v-card>
+          </div>
+          <!-- Stats & Admin/User Controls -->
+          <div class="d-flex flex-column align-end ml-4">
+            <div class="d-flex align-center text-grey"><v-icon small class="mr-1">mdi-eye</v-icon><span>{{ solution.views || 0 }}</span></div>
+            <div class="d-flex align-center text-grey mt-2"><v-icon small class="mr-1">mdi-comment-text-outline</v-icon><span>{{ solution.comment_count || 0 }}</span></div>
+            <div class="mt-auto d-flex">
+                <!-- User and Admin Edit/Delete Buttons -->
+                <v-btn v-if="isOwner(solution) && canEdit(solution)" icon="mdi-pencil" variant="text" size="small" @click.prevent.stop="openEditDialog(solution)"></v-btn>
+                <v-btn v-if="isOwner(solution) || profile?.role === 'admin'" icon="mdi-delete" color="red-lighten-1" variant="text" size="small" @click.prevent.stop="openConfirmDialog(solution)"></v-btn>
+            </div>
+          </div>
+        </v-card-text>
+        <v-divider v-if="index < solutions.length - 1"></v-divider>
+      </div>
+    </div>
+    <v-card-text v-else class="text-center py-8">
+      <p>No solutions have been submitted for this problem yet.</p>
+    </v-card-text>
+
+    <!-- Dialogs -->
+    <v-dialog v-model="showConfirmDialog" max-width="500" persistent>
+      <v-card>
+        <v-card-title class="text-h5">Confirm Deletion</v-card-title>
+        <v-card-text>Are you sure you want to delete this solution?</v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn text @click="showConfirmDialog = false">Cancel</v-btn>
+          <v-btn color="red-darken-1" :loading="isDeleting" @click="deleteSolution">Delete</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+    <v-dialog v-model="showEditDialog" max-width="600" persistent>
+        <v-card>
+            <v-card-title class="text-h5">Edit Solution</v-card-title>
+            <v-card-text>
+                <v-text-field v-model="editForm.title" label="Title"></v-text-field>
+                <v-textarea v-model="editForm.description" label="Description (Optional)"></v-textarea>
+            </v-card-text>
+            <v-card-actions>
+                <v-spacer></v-spacer>
+                <v-btn text @click="showEditDialog = false">Cancel</v-btn>
+                <v-btn color="primary" @click="updateSolution">Save</v-btn>
+            </v-card-actions>
+        </v-card>
+    </v-dialog>
+  </div>
+</template>
+
+<style scoped>
+.solution-card {
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
+}
+.solution-card:hover {
+  background-color: rgba(0, 0, 0, 0.03);
+}
+</style>
+
+<script setup>
+import { ref } from 'vue';
+import { useRouter } from 'vue-router';
+import { useSupabaseClient, useSupabaseUser } from '#imports';
+import { useVoting } from '~/composables/useVoting';
+
+const props = defineProps({
+  solutions: {
+    type: Array,
+    required: true,
+  },
+  profile: {
+    type: Object,
+    default: null
+  }
+});
+
+const emit = defineEmits(['solutionDeleted']);
+
+const supabase = useSupabaseClient();
+const user = useSupabaseUser();
+const router = useRouter();
+const { votingInProgress, handleVote } = useVoting();
+
+const showConfirmDialog = ref(false);
+const isDeleting = ref(false);
+const solutionToDelete = ref(null);
+const showEditDialog = ref(false);
+const solutionToEdit = ref(null);
+const editForm = ref({ title: '', description: '' });
+
+// Helper functions for checking ownership and editability
+const isOwner = (content) => user.value && content && user.value.id === content.submitted_by;
+const canEdit = (content) => {
+    if (!content.created_at) return false;
+    const tenMinutes = 10 * 60 * 1000;
+    return new Date() - new Date(content.created_at) < tenMinutes;
+};
+
+const navigateToSolution = (solutionId) => router.push(`/solutions/${solutionId}`);
+
+const openConfirmDialog = (solution) => {
+    solutionToDelete.value = solution;
+    showConfirmDialog.value = true;
+};
+
+const deleteSolution = async () => {
+    if (!solutionToDelete.value) return;
+    isDeleting.value = true;
+    try {
+        const request = props.profile?.role === 'admin'
+            ? supabase.rpc('delete_solution_with_dependencies', { solution_id_to_delete: solutionToDelete.value.id })
+            : supabase.from('solutions').delete().eq('id', solutionToDelete.value.id);
+
+        const { error } = await request;
+        if (error) throw error;
+        emit('solutionDeleted', solutionToDelete.value.id);
+        showConfirmDialog.value = false;
+    } catch (e) {
+        console.error("Error deleting solution:", e);
+    } finally {
+        isDeleting.value = false;
+    }
+};
+
+const openEditDialog = (solution) => {
+    solutionToEdit.value = solution;
+    editForm.value.title = solution.title;
+    editForm.value.description = solution.description;
+    showEditDialog.value = true;
+};
+
+const updateSolution = async () => {
+    if (!solutionToEdit.value) return;
+    try {
+        const { data, error } = await supabase
+            .from('solutions')
+            .update({ title: editForm.value.title, description: editForm.value.description })
+            .eq('id', solutionToEdit.value.id)
+            .select()
+            .single();
+        if (error) throw error;
+        
+        const index = props.solutions.findIndex(s => s.id === data.id);
+        if (index !== -1) {
+            props.solutions[index].title = data.title;
+            props.solutions[index].description = data.description;
+        }
+        showEditDialog.value = false;
+    } catch(e) {
+        console.error("Error updating solution:", e);
+    }
+};
+</script>
+
