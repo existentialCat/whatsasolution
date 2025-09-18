@@ -2,11 +2,8 @@
 <template>
   <v-app>
     <LayoutAppSidebar @open-submit-dialog="showProblemForm = true" />
-
     <v-main>
-      <v-container>
         <NuxtPage />
-      </v-container>
       <SubmitProblemDialog v-if="user" v-model="showProblemForm" />
     </v-main>
   </v-app>

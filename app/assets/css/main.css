@@ -1,5 +1,10 @@
 /* This is the global stylesheet for your application. */
 
+/* Fixed overflow */
+body {
+  overflow-y: hidden;
+}
+
 /* Apply the custom font families to the appropriate elements. */
 h1, h2, h3, h4, h5, h6, .v-card-title {
   font-family: 'Poppins', sans-serif !important;

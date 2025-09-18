@@ -1,3 +1,4 @@
+<!-- /components/Layout/NotificationMenu.vue -->
 <template>
   <v-list-item rounded="xl">
     <v-menu activator="parent" location="end" transition="slide-x-transition">

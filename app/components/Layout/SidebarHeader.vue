@@ -1,3 +1,4 @@
+<!-- /components/Layout/SidebarHeader.vue -->
 <template>
   <v-list-item v-if="!mobile" @click="goHome" class="my-2" style="cursor: pointer;">
     <template v-slot:prepend>

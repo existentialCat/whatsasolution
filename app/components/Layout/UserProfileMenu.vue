@@ -1,3 +1,4 @@
+<!-- /components/Layout/UserProfileMenu.vue -->
 <template>
   <div class="pa-2">
     <v-menu v-if="user && profile" location="top end">
