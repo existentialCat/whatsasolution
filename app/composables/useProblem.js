@@ -84,14 +84,29 @@ export function useProblem() {
               })
               .subscribe();
 
+          // solutionsChannel = supabase.channel(`solution-assessments-for-problem:${problemId}`)
+          //     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'solutions', filter: `parent_problem=eq.${problemId}`},
+          //     (payload) => {
+          //       if (problem.value && problem.value.solutions) {
+          //           const index = problem.value.solutions.findIndex(s => s.id === payload.new.id);
+          //           if (index > -1) {
+          //               Object.assign(problem.value.solutions[index], payload.new);
+          //           }
+          //       }
+          //     })
+          //     .subscribe();
           solutionsChannel = supabase.channel(`solution-assessments-for-problem:${problemId}`)
               .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'solutions', filter: `parent_problem=eq.${problemId}`},
               (payload) => {
-                if (problem.value && problem.value.solutions) {
-                    const index = problem.value.solutions.findIndex(s => s.id === payload.new.id);
-                    if (index > -1) {
-                        Object.assign(problem.value.solutions[index], payload.new);
-                    }
+                 if (problem.value && problem.value.solutions) {
+                  const index = problem.value.solutions.findIndex(s => s.id === payload.new.id);
+                  if (index > -1) {
+                    // Only update the ai_assessment property
+                    problem.value.solutions[index].ai_side_effects = payload.new.ai_side_effects;
+                    problem.value.solutions[index].ai_assessment_status = payload.new.ai_assessment_status;
+                    problem.value.solutions[index].ai_viability_score = payload.new.ai_viability_score;
+                    problem.value.solutions[index].ai_viability_reason = payload.new.ai_viability_reason;
+                  }
                 }
               })
               .subscribe();
