@@ -11,7 +11,6 @@ export function useComments(solutionId) {
   const { data: fetchedComments, pending: loading, refresh } = useAsyncData(
     `comments-for-solution-${solutionId}`,
     async () => {
-      // This is the key fix: We explicitly select `submitted_by` to ensure it's always available.
       const { data, error } = await supabase
         .from('comments')
         .select('*, submitted_by, users(username), comment_votes(user_id)')
@@ -29,7 +28,6 @@ export function useComments(solutionId) {
     }
   );
 
-  // This watcher syncs the server-fetched data.
   watch(fetchedComments, (newData) => {
     if (newData) {
       allComments.value = newData.map(comment => ({
@@ -39,7 +37,6 @@ export function useComments(solutionId) {
     }
   }, { immediate: true });
 
-  // This watcher applies user-specific data like "liked" status.
   watch(user, (currentUser) => {
     if (currentUser && allComments.value.length > 0) {
       const userId = currentUser.id;
@@ -49,26 +46,46 @@ export function useComments(solutionId) {
     }
   }, { immediate: true });
 
-  // This computed property builds the nested tree structure for replies.
-  const commentTree = computed(() => {
+  // This is the key change: We now correctly build and return the flat list.
+  const flatComments = computed(() => {
     const comments = allComments.value;
-    const map = {};
+    if (!comments || comments.length === 0) return [];
+    
+    const commentMap = new Map(comments.map(c => [c.id, { ...c, replies: [] }]));
     const roots = [];
 
-    for (const comment of comments) {
-      map[comment.id] = { ...comment, replies: [] };
-    }
-
-    for (const comment of comments) {
-      if (comment.parent_comment_id && map[comment.parent_comment_id]) {
-        map[comment.parent_comment_id].replies.push(map[comment.id]);
+    // Build the tree structure
+    for (const comment of commentMap.values()) {
+      if (comment.parent_comment_id && commentMap.has(comment.parent_comment_id)) {
+        const parent = commentMap.get(comment.parent_comment_id);
+        // Add context for who is being replied to
+        comment.replyingToUsername = parent.users?.username || 'user';
+        parent.replies.push(comment);
       } else {
-        roots.push(map[comment.id]);
+        roots.push(comment);
       }
     }
-    return roots.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    
+    // Sort top-level comments by most recent
+    roots.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    
+    const flatList = [];
+    // Recursive function to flatten the tree into an ordered list
+    function flatten(commentList) {
+        for (const comment of commentList) {
+            flatList.push(comment);
+            if (comment.replies && comment.replies.length > 0) {
+                // Sort replies by oldest first to maintain conversational flow
+                comment.replies.sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+                flatten(comment.replies);
+            }
+        }
+    }
+    
+    flatten(roots);
+    return flatList;
   });
 
-  return { allComments, commentTree, loading, refresh };
+  return { allComments, flatComments, loading, refresh };
 }
 

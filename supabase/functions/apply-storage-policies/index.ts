@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
       return json({ error: "Unauthorized: missing x-admin-token or Authorization: Bearer header" }, { status: 401 });
     }
     if (token !== ADMIN_TOKEN) {
-      return json({ error: "Unauthorized: invalid admin token" }, { status: 401 });
+      return json({ error: `Unauthorized: invalid admin token: ${ADMIN_TOKEN} --- ${token}` }, { status: 401 });
     }
 
     let body: any = {};

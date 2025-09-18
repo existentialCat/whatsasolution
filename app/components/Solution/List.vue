@@ -14,31 +14,37 @@
               <v-icon size="x-large">mdi-menu-down</v-icon>
             </v-btn>
           </div>
+
           <!-- Content -->
           <div class="flex-grow-1" style="min-width: 0;">
             <v-card class="solution-card" flat hover @click="navigateToSolution(solution.id)">
               <v-card-title class="text-h6 pt-0 text-wrap">{{ solution.title }}</v-card-title>
-              <!-- This is the updated section: Username is now a link -->
               <v-card-subtitle>
                 Submitted by: 
                 <NuxtLink :to="`/profile/${solution.submitted_by}`" @click.stop class="text-decoration-none">
-                    {{ solution.users?.username || 'Anonymous' }}
+                  {{ solution.users?.username || 'Anonymous' }}
                 </NuxtLink>
               </v-card-subtitle>
               <v-card-text><p>{{ solution.description }}</p></v-card-text>
             </v-card>
           </div>
+
           <!-- Stats & Admin/User Controls -->
           <div class="d-flex flex-column align-end ml-4">
             <div class="d-flex align-center text-grey"><v-icon small class="mr-1">mdi-eye</v-icon><span>{{ solution.views || 0 }}</span></div>
             <div class="d-flex align-center text-grey mt-2"><v-icon small class="mr-1">mdi-comment-text-outline</v-icon><span>{{ solution.comment_count || 0 }}</span></div>
             <div class="mt-auto d-flex">
-                <!-- User and Admin Edit/Delete Buttons -->
-                <v-btn v-if="isOwner(solution) && canEdit(solution)" icon="mdi-pencil" variant="text" size="small" @click.prevent.stop="openEditDialog(solution)"></v-btn>
-                <v-btn v-if="isOwner(solution) || profile?.role === 'admin'" icon="mdi-delete" color="red-lighten-1" variant="text" size="small" @click.prevent.stop="openConfirmDialog(solution)"></v-btn>
+              <v-btn v-if="isOwner(solution) && canEdit(solution)" icon="mdi-pencil" variant="text" size="small" @click.prevent.stop="openEditDialog(solution)"></v-btn>
+              <v-btn v-if="isOwner(solution) || profile?.role === 'admin'" icon="mdi-delete" color="red-lighten-1" variant="text" size="small" @click.prevent.stop="openConfirmDialog(solution)"></v-btn>
             </div>
           </div>
         </v-card-text>
+
+        <!-- This is the new section for the AI Assessment -->
+        <div class="px-4 pb-2">
+            <SolutionAIAssessment :solution="solution" />
+        </div>
+
         <v-divider v-if="index < solutions.length - 1"></v-divider>
       </div>
     </div>
@@ -47,28 +53,36 @@
     </v-card-text>
 
     <!-- Dialogs -->
-    <v-dialog v-model="showConfirmDialog" max-width="500" persistent>
-      <v-card>
-        <v-card-title class="text-h5">Confirm Deletion</v-card-title>
-        <v-card-text>Are you sure you want to delete this solution?</v-card-text>
-        <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn text @click="showConfirmDialog = false">Cancel</v-btn>
-          <v-btn color="red-darken-1" :loading="isDeleting" @click="deleteSolution">Delete</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <ConfirmationDialog
+      v-model="showConfirmDialog"
+      title="Confirm Deletion"
+      message="Are you sure you want to delete this solution?"
+      confirm-text="Delete"
+      :loading="isDeleting"
+      @confirm="deleteSolution"
+    />
+    
     <v-dialog v-model="showEditDialog" max-width="600" persistent>
         <v-card>
             <v-card-title class="text-h5">Edit Solution</v-card-title>
             <v-card-text>
-                <v-text-field v-model="editForm.title" label="Title"></v-text-field>
-                <v-textarea v-model="editForm.description" label="Description (Optional)"></v-textarea>
+                <v-text-field 
+                    v-model="editForm.title" 
+                    label="Title"
+                    counter="300"
+                    :rules="[v => !!v && v.length <= 300 || 'Title must be 300 characters or less']"
+                ></v-text-field>
+                <v-textarea 
+                    v-model="editForm.description" 
+                    label="Description (Optional)"
+                    counter="900"
+                    :rules="[v => !v || v.length <= 900 || 'Description must be 900 characters or less']"
+                ></v-textarea>
             </v-card-text>
             <v-card-actions>
                 <v-spacer></v-spacer>
                 <v-btn text @click="showEditDialog = false">Cancel</v-btn>
-                <v-btn color="primary" @click="updateSolution">Save</v-btn>
+                <v-btn color="primary" @click="updateSolution" :disabled="!editForm.title.trim() || editForm.title.length > 300 || (editForm.description && editForm.description.length > 900)">Save</v-btn>
             </v-card-actions>
         </v-card>
     </v-dialog>
@@ -88,8 +102,9 @@
 <script setup>
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { useSupabaseClient, useSupabaseUser } from '#imports';
+import { useSupabaseClient } from '#imports';
 import { useVoting } from '~/composables/useVoting';
+import { usePermissions } from '~/composables/usePermissions';
 
 const props = defineProps({
   solutions: {
@@ -105,9 +120,9 @@ const props = defineProps({
 const emit = defineEmits(['solutionDeleted']);
 
 const supabase = useSupabaseClient();
-const user = useSupabaseUser();
 const router = useRouter();
 const { votingInProgress, handleVote } = useVoting();
+const { isOwner, canEdit } = usePermissions();
 
 const showConfirmDialog = ref(false);
 const isDeleting = ref(false);
@@ -115,14 +130,6 @@ const solutionToDelete = ref(null);
 const showEditDialog = ref(false);
 const solutionToEdit = ref(null);
 const editForm = ref({ title: '', description: '' });
-
-// Helper functions for checking ownership and editability
-const isOwner = (content) => user.value && content && user.value.id === content.submitted_by;
-const canEdit = (content) => {
-    if (!content.created_at) return false;
-    const tenMinutes = 10 * 60 * 1000;
-    return new Date() - new Date(content.created_at) < tenMinutes;
-};
 
 const navigateToSolution = (solutionId) => router.push(`/solutions/${solutionId}`);
 

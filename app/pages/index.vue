@@ -1,3 +1,4 @@
+<!-- pages/index.vue -->
 <template>
   <v-container>
     <v-row class="text-center">

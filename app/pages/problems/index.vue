@@ -1,3 +1,4 @@
+<!-- pages/problems/index.vue -->
 <template>
   <v-container>
     <h1 class="text-h4 mb-4">Problems</h1>
@@ -5,13 +6,19 @@
         <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
         <p class="mt-4">Loading problems...</p>
     </div>
-    <v-row v-else-if="problems.length">
-      <v-col v-for="problem in problems" :key="problem.id" cols="12" md="6" lg="4">
-        <ProblemCard
-          :problem="problem"
-          :profile="profile"
-          @problemDeleted="handleProblemDeleted"
-        />
+    <!-- This is the updated layout with a constrained width -->
+    <v-row v-else-if="problems.length" justify="center">
+      <v-col cols="12" md="8" lg="6">
+        <v-card flat class="border rounded-lg">
+          <div v-for="(problem, index) in problems" :key="problem.id">
+            <ProblemCard
+              :problem="problem"
+              :profile="profile"
+              @problemDeleted="handleProblemDeleted"
+            />
+            <v-divider v-if="index < problems.length - 1"></v-divider>
+          </div>
+        </v-card>
       </v-col>
     </v-row>
      <div v-else class="text-center text-grey py-10">
@@ -23,7 +30,6 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useSupabaseClient, useSupabaseUser } from '#imports';
-import ProblemCard from '~/components/ProblemCard.vue';
 
 const supabase = useSupabaseClient();
 const user = useSupabaseUser();
@@ -47,10 +53,9 @@ const fetchUserProfile = async () => {
   }
 };
 
-// Fetches the list of problems using the new sorting function.
+// Fetches the list of problems using the sorting function.
 const fetchProblems = async () => {
   try {
-    // This now calls the updated function from your Canvas.
     const { data, error } = await supabase.rpc('get_problems_by_activity');
     if (error) throw error;
     problems.value = data;

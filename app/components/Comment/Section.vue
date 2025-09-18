@@ -27,13 +27,13 @@
     <div v-if="loading" class="text-center py-8">
       <v-progress-circular indeterminate color="primary"></v-progress-circular>
     </div>
-    <div v-else-if="commentTree.length === 0" class="text-center text-grey py-8">
+    <div v-else-if="flatComments.length === 0" class="text-center text-grey py-8">
       <p>No comments yet. Be the first to start the conversation!</p>
     </div>
 
-    <!-- List of Comments -->
+    <!-- This now renders the new flat list of comments -->
     <v-list v-else lines="three" class="bg-transparent">
-      <div v-for="(comment, index) in commentTree" :key="comment.id">
+      <div v-for="(comment, index) in flatComments" :key="comment.id">
         <CommentItem
           :comment="comment"
           :profile="profile"
@@ -42,7 +42,7 @@
           @delete="openDeleteDialog"
           @update="updateComment"
         />
-        <v-divider v-if="index < commentTree.length - 1" class="my-4"></v-divider>
+        <v-divider v-if="index < flatComments.length - 1" class="my-2"></v-divider>
       </div>
     </v-list>
      <v-dialog v-model="showDeleteDialog" max-width="500" persistent>
@@ -60,11 +60,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue';
+import { ref, onMounted, nextTick, computed, watch } from 'vue';
 import { useSupabaseClient, useSupabaseUser } from '#imports';
 import { useRouter } from 'vue-router';
-import CommentItem from '~/components/CommentItem.vue';
-import { useComments } from '~/composables/useComments'; 
 
 const props = defineProps({
   solutionId: { type: String, required: true },
@@ -74,12 +72,79 @@ const supabase = useSupabaseClient();
 const user = useSupabaseUser();
 const router = useRouter();
 
-const { allComments, commentTree, loading } = useComments(props.solutionId);
-
+const allComments = ref([]);
+const loading = ref(true);
 const newCommentText = ref('');
 const showDeleteDialog = ref(false);
 const commentToDeleteId = ref(null);
 const profile = ref(null);
+
+const flatComments = computed(() => {
+    const comments = allComments.value;
+    if (!comments || comments.length === 0) return [];
+    
+    const commentMap = new Map(comments.map(c => [c.id, { ...c, replies: [] }]));
+    const roots = [];
+
+    for (const comment of commentMap.values()) {
+      if (comment.parent_comment_id && commentMap.has(comment.parent_comment_id)) {
+        const parent = commentMap.get(comment.parent_comment_id);
+        comment.replyingToUsername = parent.users?.username || 'user';
+        parent.replies.push(comment);
+      } else {
+        roots.push(comment);
+      }
+    }
+    
+    roots.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    
+    const flatList = [];
+    function flatten(commentList) {
+        for (const comment of commentList) {
+            flatList.push(comment);
+            if (comment.replies && comment.replies.length > 0) {
+                comment.replies.sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+                flatten(comment.replies);
+            }
+        }
+    }
+    
+    flatten(roots);
+    return flatList;
+});
+
+const fetchComments = async () => {
+  loading.value = true;
+  try {
+    const { data, error } = await supabase
+      .from('comments')
+      .select('*, submitted_by, users(username), comment_votes(user_id)')
+      .eq('parent_solution', props.solutionId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    
+    allComments.value = data.map(comment => ({ ...comment, user_liked: false }));
+
+  } catch (e) {
+    console.error('Error fetching comments:', e);
+  } finally {
+    loading.value = false;
+  }
+};
+
+const applyUserLikes = () => {
+    if(user.value && allComments.value.length > 0) {
+        const userId = user.value.id;
+        allComments.value.forEach(comment => {
+            comment.user_liked = comment.comment_votes.some(vote => vote.user_id === userId);
+        });
+    }
+};
+
+watch(user, () => {
+    applyUserLikes();
+});
 
 const submitComment = async ({ content, parentCommentId = null, onSuccess = () => {} }) => {
   if (!content.trim() || !user.value) return;
@@ -196,10 +261,12 @@ const updateComment = async ({ id, content }) => {
 };
 
 onMounted(async () => {
-    if (user.value) {
-        const { data } = await supabase.from('users').select('role').eq('id', user.value.id).single();
-        profile.value = data;
-    }
+  await fetchComments();
+  applyUserLikes();
+  if (user.value) {
+    const { data } = await supabase.from('users').select('role').eq('id', user.value.id).single();
+    profile.value = data;
+  }
 });
 </script>
 

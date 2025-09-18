@@ -1,0 +1,19 @@
+/* This is the global stylesheet for your application. */
+
+/* Apply the custom font families to the appropriate elements. */
+h1, h2, h3, h4, h5, h6, .v-card-title {
+  font-family: 'Poppins', sans-serif !important;
+}
+
+body, p, span, div, .v-card-text, .v-card-subtitle, .v-list-item-title, .v-btn {
+  font-family: 'Inter', sans-serif !important;
+}
+
+/* This is the new rule for mobile padding. */
+/* On screens smaller than 600px, it reduces the container padding. */
+@media (max-width: 599px) {
+  .v-container {
+    padding: 4px !important;
+  }
+}
+

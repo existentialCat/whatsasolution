@@ -1,3 +1,5 @@
+// composables/useViews.js
+
 // This composable centralizes the logic for recording solution views.
 import { useSupabaseClient, useSupabaseUser } from '#imports';
 

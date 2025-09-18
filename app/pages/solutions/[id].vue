@@ -1,3 +1,4 @@
+<!-- pages/solutions/[id].vue -->
 <template>
   <div>
     <!-- Loading Indicator -->
@@ -33,23 +34,22 @@
       <!-- Solution Details -->
       <v-row>
         <v-col cols="12">
-            <v-card-text class="d-flex align-start pa-4">
+            <!-- Desktop Layout -->
+            <v-card-text v-if="!mobile" class="d-flex align-start pa-4">
               <!-- Voting Column -->
               <div class="d-flex flex-column align-center mr-4">
                  <v-btn icon variant="plain" :color="solution.user_vote === 'upvote' ? 'green' : 'grey'" @click.stop="handleVote(solution, 'upvote')" :disabled="votingInProgress.has(solution.id)">
                     <v-icon size="x-large">mdi-menu-up</v-icon>
                   </v-btn>
-                  <div class="text-h6 font-weight-bold my-n2">{{ solution.upvotes - solution.downvotes }}</div>
+                  <div class="text-h6 font-weight-bold my-n2">{{ (solution.upvotes || 0) - (solution.downvotes || 0) }}</div>
                   <v-btn icon variant="plain" :color="solution.user_vote === 'downvote' ? 'red' : 'grey'" @click.stop="handleVote(solution, 'downvote')" :disabled="votingInProgress.has(solution.id)">
                     <v-icon size="x-large">mdi-menu-down</v-icon>
                   </v-btn>
               </div>
-
               <!-- Main Content -->
               <div class="flex-grow-1">
                 <h1 class="text-h4 mb-2">{{ solution.title }}</h1>
                 <v-card-subtitle class="mb-4">
-                  <!-- This is the updated section: The username is now a clickable link -->
                   Submitted by: 
                   <NuxtLink :to="`/profile/${solution.submitted_by}`" class="text-decoration-none">
                     {{ solution.users?.username || 'Anonymous' }}
@@ -58,6 +58,37 @@
                 <p class="text-body-1">{{ solution.description }}</p>
               </div>
             </v-card-text>
+            
+            <!-- Mobile Layout -->
+            <v-card-text v-else class="pa-4">
+                <div>
+                    <h1 class="text-h5 mb-2">{{ solution.title }}</h1>
+                    <v-card-subtitle class="px-0 mb-4">
+                      Submitted by: 
+                      <NuxtLink :to="`/profile/${solution.submitted_by}`" class="text-decoration-none">
+                        {{ solution.users?.username || 'Anonymous' }}
+                      </NuxtLink>
+                    </v-card-subtitle>
+                    <p class="text-body-1">{{ solution.description }}</p>
+                </div>
+                <v-card-actions class="px-0 mt-4">
+                    <!-- Mobile Voting -->
+                    <v-btn icon variant="text" size="small" :color="solution.user_vote === 'upvote' ? 'green' : 'grey-darken-1'" @click.stop="handleVote(solution, 'upvote')">
+                        <v-icon>mdi-arrow-up-bold-outline</v-icon>
+                    </v-btn>
+                    <span class="font-weight-bold mx-1">{{ (solution.upvotes || 0) - (solution.downvotes || 0) }}</span>
+                    <v-btn icon variant="text" size="small" :color="solution.user_vote === 'downvote' ? 'red' : 'grey-darken-1'" @click.stop="handleVote(solution, 'downvote')">
+                        <v-icon>mdi-arrow-down-bold-outline</v-icon>
+                    </v-btn>
+                </v-card-actions>
+            </v-card-text>
+        </v-col>
+      </v-row>
+
+      <!-- This is the new section for the AI Solution Assessment -->
+      <v-row>
+        <v-col cols="12">
+            <SolutionAIAssessment startExpanded :solution="solution" />
         </v-col>
       </v-row>
 
@@ -66,7 +97,7 @@
       <!-- Comments Section -->
       <v-row>
         <v-col cols="12">
-          <CommentsSection :solution-id="solution.id" />
+          <CommentSection :solution-id="solution.id" />
         </v-col>
       </v-row>
 
@@ -95,20 +126,22 @@
 </style>
 
 <script setup>
-import { ref, onMounted, nextTick, watch } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useSupabaseClient, useSupabaseUser } from '#imports';
+import { useDisplay } from 'vuetify';
 import { useVoting } from '~/composables/useVoting';
 import { useViews } from '~/composables/useViews';
-import CommentsSection from '~/components/CommentsSection.vue';
 
 const supabase = useSupabaseClient();
 const user = useSupabaseUser();
 const route = useRoute();
+const { mobile } = useDisplay();
 
 const solution = ref(null);
 const loading = ref(true);
 const error = ref(null);
+let channel = null; // Channel for real-time updates
 
 const { votingInProgress, handleVote } = useVoting();
 const { recordSolutionViews } = useViews();
@@ -192,6 +225,21 @@ const fetchSolutionDetails = async () => {
 
 onMounted(async () => {
     await fetchSolutionDetails();
+
+    // Set up real-time listener for this specific solution
+    if (solution.value) {
+        channel = supabase.channel(`solution-update:${solution.value.id}`)
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'solutions',
+                filter: `id=eq.${solution.value.id}`
+            }, (payload) => {
+                // When an update comes in, merge the new data into our solution ref.
+                Object.assign(solution.value, payload.new);
+            })
+            .subscribe();
+    }
 });
 
 watch(loading, (isLoading) => {
@@ -202,6 +250,12 @@ watch(loading, (isLoading) => {
 
 watch(() => route.hash, () => {
     handleScrollAndHighlight();
+});
+
+onUnmounted(() => {
+    if (channel) {
+        supabase.removeChannel(channel);
+    }
 });
 </script>
 
