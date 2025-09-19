@@ -1,107 +1,124 @@
-// supabase/functions/apply-storage-policies/index.ts
-// Admin-only maintenance function to apply storage RLS fixes.
-// - Creates storage.prefixes policies for the 'problems' bucket
-// - Optionally drops broad storage.objects policies (explicit request only)
-// Uses SUPABASE_DB_URL to run DDL. Protect this route with an admin token.
-
-import pgDefault from "npm:pg@8.11.3";
-const { Client } = pgDefault as unknown as { Client: any };
-
-type Json = Record<string, unknown> | unknown[] | string | number | boolean | null;
-
-const cors = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-admin-token, content-type",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-};
-
-const DB_URL = Deno.env.get("SUPABASE_DB_URL");
-const ADMIN_TOKEN = Deno.env.get("ADMIN_TASKS_TOKEN");
-
-const json = (body: Json, init: ResponseInit = {}) =>
-  new Response(typeof body === "string" ? body : JSON.stringify(body), {
-    ...init,
-    headers: { "Content-Type": "application/json", ...cors, ...(init.headers || {}) },
-  });
-
-function extractToken(req: Request): string | null {
-  const h = (name: string) => req.headers.get(name) ?? req.headers.get(name.toLowerCase());
-  const explicit = h("x-admin-token");
-  if (explicit && explicit.trim()) return explicit.trim();
-  const auth = h("authorization");
-  if (auth && auth.toLowerCase().startsWith("bearer ")) return auth.slice(7).trim();
-  return null;
-}
-
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
-
-  // Health check / quick env validation
-  if (req.method === "GET") {
-    return json({
-      ok: true,
-      env: {
-        hasDbUrl: Boolean(DB_URL),
-        hasAdminToken: Boolean(ADMIN_TOKEN),
-      },
-      note: "POST with x-admin-token or Authorization: Bearer <token> to apply changes",
-    });
-  }
-
-  if (req.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
-
+// supabase/functions/assess-problem/index.ts
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`;
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+async function processProblem(problemData, supabaseAdmin) {
   try {
-    if (!DB_URL) return json({ error: "SUPABASE_DB_URL not set in environment" }, { status: 500 });
-    if (!ADMIN_TOKEN) return json({ error: "ADMIN_TASKS_TOKEN not set in environment" }, { status: 500 });
-
-    const token = extractToken(req);
-    if (!token) {
-      return json({ error: "Unauthorized: missing x-admin-token or Authorization: Bearer header" }, { status: 401 });
+    if (!problemData || !problemData.id || !problemData.title) {
+      throw new Error("Invalid problem data passed to processProblem.");
     }
-    if (token !== ADMIN_TOKEN) {
-      return json({ error: "Unauthorized: invalid admin token" }, { status: 401 });
+    const systemPrompt = `You are an expert fact-checker and content analyst.
+    Your SOLE task is to analyze the user-submitted "problem" and return your findings in the following exact format, with no other text or explanations:
+    <summary>
+    A brief, neutral fact-check of the central claim.
+    </summary>
+    <probability>
+    A number between 0.00 and 1.00 representing the probability that the submission is a parody or troll post.
+    </probability>`;
+    const currentDate = new Date().toISOString().split('T')[0];
+    const userQuery = `Current Date: ${currentDate}\nProblem Title: ${problemData.title}`;
+    const geminiResponse = await fetch(GEMINI_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: userQuery
+              }
+            ]
+          }
+        ],
+        systemInstruction: {
+          parts: [
+            {
+              text: systemPrompt
+            }
+          ]
+        },
+        tools: [
+          {
+            "google_search": {}
+          }
+        ]
+      })
+    });
+    if (!geminiResponse.ok) throw new Error(`Gemini API request failed: ${await geminiResponse.text()}`);
+    const result = await geminiResponse.json();
+    const candidate = result.candidates?.[0];
+    const assessmentText = candidate?.content?.parts?.[0]?.text;
+    if (!assessmentText) throw new Error("Invalid response from Gemini API.");
+    const summaryMatch = assessmentText.match(/<summary>([\s\S]*?)<\/summary>/);
+    const probabilityMatch = assessmentText.match(/<probability>([\s\S]*?)<\/probability>/);
+    if (!summaryMatch || !probabilityMatch) throw new Error(`Could not parse the AI response.`);
+    const assessment = {
+      fact_check_summary: summaryMatch[1].trim(),
+      parody_probability: parseFloat(probabilityMatch[1].trim())
+    };
+    let sources = [];
+    const groundingMetadata = candidate?.groundingMetadata;
+    if (groundingMetadata && groundingMetadata.groundingAttributions) {
+      sources = groundingMetadata.groundingAttributions.map((attribution)=>({
+          uri: attribution.web?.uri,
+          title: attribution.web?.title
+        })).filter((source)=>source.uri && source.title);
     }
-
-    let body: any = {};
-    try { body = await req.json(); } catch (_) { /* ignore empty body */ }
-    const dropPolicies: string[] = Array.isArray(body?.dropPolicies) ? body.dropPolicies : [];
-
-    const client = new Client({ connectionString: DB_URL, application_name: "apply-storage-policies" });
-    await client.connect();
-
-    const created: string[] = [];
-    const dropped: string[] = [];
-
-    const creates = [
-      `create policy "Prefixes insert problems anon" on storage.prefixes for insert to anon with check (bucket_id = 'problems');`,
-      `create policy "Prefixes insert problems auth" on storage.prefixes for insert to authenticated with check (bucket_id = 'problems');`,
-      `create policy "Prefixes select problems" on storage.prefixes for select to anon, authenticated using (bucket_id = 'problems');`,
-    ];
-
-    for (const sql of creates) {
-      try {
-        await client.query(sql);
-        created.push(sql);
-      } catch (e) {
-        const msg = String((e as Error)?.message ?? e);
-        if (!/already exists/i.test(msg)) throw e;
-      }
+    if (sources.length === 0) {
+      assessment.fact_check_summary = assessment.fact_check_summary.replace(/\[\d+(,\s*\d+)*\]/g, '').trim();
     }
-
-    if (dropPolicies.length > 0) {
-      for (const name of dropPolicies) {
-        const safeName = String(name).replace(/"/g, '""');
-        const dropSql = `drop policy if exists "${safeName}" on storage.objects;`;
-        await client.query(dropSql);
-        dropped.push(String(name));
-      }
+    await supabaseAdmin.from("problems").update({
+      ai_assessment_status: 'completed',
+      ai_fact_check: assessment.fact_check_summary,
+      ai_parody_probability: assessment.parody_probability,
+      ai_sources: sources
+    }).eq("id", problemData.id);
+  } catch (err) {
+    console.error(`Error processing problem ${problemData?.id}:`, err.message);
+    if (problemData?.id) {
+      await supabaseAdmin.from("problems").update({
+        ai_assessment_status: "failed"
+      }).eq("id", problemData.id);
     }
-
-    await client.end();
-
-    return json({ ok: true, createdCount: created.length, dropped, message: "Creates are idempotent; existing policies are skipped." });
-  } catch (e) {
-    console.error("apply-storage-policies error", e);
-    return json({ error: String((e as Error)?.message ?? e) }, { status: 500 });
+  }
+}
+serve(async (req)=>{
+  const supabaseAdmin = createClient(SUPABASE_URL ?? "", SUPABASE_SERVICE_ROLE_KEY ?? "");
+  try {
+    const body = await req.json();
+    // Handle keep-alive pings from the cron job
+    if (body.type === "keep-alive") {
+      return new Response(JSON.stringify({
+        message: "Function is awake."
+      }), {
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
+    }
+    // Handle retry/processing requests from the cron job
+    if (body.record) {
+      console.log(`Received request to process problem: ${body.record.id}`);
+      await processProblem(body.record, supabaseAdmin);
+      return new Response(JSON.stringify({
+        success: true,
+        message: `Processed problem ${body.record.id}`
+      }), {
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
+    }
+    throw new Error("Invalid request body.");
+  } catch (err) {
+    console.error("Error in serve function:", err.message);
+    return new Response(String(err?.message ?? err), {
+      status: 400
+    });
   }
 });
