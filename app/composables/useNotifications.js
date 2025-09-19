@@ -1,8 +1,9 @@
 // composables/useNotifications.js
-import { ref, computed, watch } from 'vue';
-import { useSupabaseClient, useSupabaseUser, useAsyncData } from '#imports';
+import { computed, watch } from 'vue';
+import { useSupabaseClient, useSupabaseUser, useAsyncData, useState } from '#imports';
 
-// Helper function to format notification messages
+let isListenerInitialized = false;
+
 const formatNotification = (n) => {
   const triggerUser = n.triggering_user?.username || 'Someone';
   const strongUser = `<strong>${triggerUser}</strong>`;
@@ -10,7 +11,9 @@ const formatNotification = (n) => {
 
   switch(n.type) {
     case 'new_solution':
-      message = `${strongUser} posted a solution to your problem.`;
+      // ✅ UPDATED: Accesses the title via the corrected data path.
+      const problemTitle = n.source_solution?.problem_id?.title || 'your problem';
+      message = `${strongUser} posted a solution to "${problemTitle}".`;
       link = `/solutions/${n.source_solution_id}`;
       icon = 'mdi-lightbulb-on';
       break;
@@ -35,78 +38,114 @@ const formatNotification = (n) => {
 
 
 export function useNotifications() {
+  const notifications = useState('notifications', () => []);
+  const loading = useState('notifications-loading', () => true);
+
   const user = useSupabaseUser();
   const supabase = useSupabaseClient();
-  const notifications = ref([]);
 
-  // Fetch initial notifications
-  useAsyncData(
+  const { pending, data: fetchedNotifications, refresh } = useAsyncData(
     'user-notifications',
     async () => {
-        if(!user.value) {
-            notifications.value = [];
-            return []; // Always return a value
-        }
+        if (!user.value) return null;
         try {
             const { data, error } = await supabase
                 .from('notifications')
-                .select('*, triggering_user:triggering_user_id(username)')
+                // ✅ UPDATED: Corrected the nested join syntax for problems.
+                .select(`
+                  *,
+                  triggering_user:triggering_user_id(username),
+                  source_comment:source_comment_id(content),
+                  source_solution:source_solution_id(problem_id:problems(title))
+                `)
                 .eq('recipient_user_id', user.value.id)
                 .order('created_at', { ascending: false })
                 .limit(20);
-            
-            if (error) throw error;
 
-            const formatted = data ? data.map(formatNotification) : [];
-            notifications.value = formatted;
-            return formatted; // Return the fetched and formatted data
+            if (error) throw error;
+            return data ? data.map(formatNotification) : [];
         } catch (e) {
             console.error("Error fetching notifications:", e);
-            notifications.value = [];
-            return []; // Always return a value, even on error
+            return [];
         }
     },
-    { watch: [user] }
-  );
-  
-  // Real-time subscription
-  watch(user, (currentUser, previousUser) => {
-    if (previousUser) {
-        supabase.removeChannel(supabase.channel(`notifications:${previousUser.id}`));
+    {
+      watch: [user],
+      default: () => []
     }
-    if (!currentUser) return;
+  );
 
-    const channel = supabase.channel(`notifications:${currentUser.id}`);
-    channel
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'notifications',
-        filter: `recipient_user_id=eq.${currentUser.id}`
-      }, async (payload) => {
-        const { data: userData, error } = await supabase
-          .from('users').select('username').eq('id', payload.new.triggering_user_id).single();
-        
-        if (!error) {
-          const newNotification = { ...payload.new, triggering_user: userData };
-          notifications.value.unshift(formatNotification(newNotification));
-        }
-      })
-      .subscribe();
+  watch(fetchedNotifications, (newData) => {
+    notifications.value = newData || [];
   }, { immediate: true });
 
-  const unreadCount = computed(() => notifications.value.filter(n => !n.is_read).length);
+  watch(pending, (newPending) => {
+    loading.value = newPending;
+  }, { immediate: true });
+
+  if (!isListenerInitialized) {
+    isListenerInitialized = true;
+
+    watch(user, (currentUser, previousUser) => {
+      if (process.server) return;
+
+      let channel = supabase.channel(`notifications:${previousUser?.id}`);
+      if (channel) {
+          supabase.removeChannel(channel);
+      }
+      if (!currentUser) {
+          notifications.value = [];
+          return;
+      }
+
+      channel = supabase.channel(`notifications:${currentUser.id}`);
+      channel
+        .on(
+          'postgres_changes', 
+          { 
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notifications',
+            filter: `recipient_user_id=eq.${currentUser.id}`
+          }, 
+          async () => {
+              await refresh();
+          })
+        .subscribe();
+    }, { immediate: true });
+  }
+
+  const unreadCount = computed(() => notifications.value?.filter(n => !n.is_read).length ?? 0);
 
   const markNotificationsAsRead = async () => {
     if (unreadCount.value === 0 || !user.value) return;
-    notifications.value.forEach(n => n.is_read = true); // Optimistic update
+    const unreadIds = notifications.value.filter(n => !n.is_read).map(n => n.id);
+    notifications.value.forEach(n => { if(unreadIds.includes(n.id)) n.is_read = true });
     await supabase
       .from('notifications')
       .update({ is_read: true })
-      .eq('recipient_user_id', user.value.id)
-      .eq('is_read', false);
+      .in('id', unreadIds);
   };
 
-  return { notifications, unreadCount, markNotificationsAsRead };
-};
+  const markSingleNotificationAsRead = async (notification) => {
+    if (!notification || notification.is_read || !user.value) return;
+    
+    const notif = notifications.value.find(n => n.id === notification.id);
+    if (notif) {
+      notif.is_read = true;
+    }
+    
+    await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('id', notification.id);
+  };
 
+  return { 
+    notifications, 
+    loading, 
+    unreadCount, 
+    markNotificationsAsRead, 
+    markSingleNotificationAsRead 
+  };
+};

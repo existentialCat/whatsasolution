@@ -83,7 +83,7 @@ export function useProblem() {
                 }
               })
               .subscribe();
-
+          // uncomment to enable realtime voting and ai assessment 
           // solutionsChannel = supabase.channel(`solution-assessments-for-problem:${problemId}`)
           //     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'solutions', filter: `parent_problem=eq.${problemId}`},
           //     (payload) => {

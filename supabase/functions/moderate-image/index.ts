@@ -46,11 +46,15 @@ async function processImage(problem: any) {
     
     const result = await geminiResponse.json();
     const responseText = result.candidates?.[0]?.content?.parts?.[0]?.text.trim() || 'UNSAFE';
+    
+    // This is the new, more detailed logging.
+    console.log(`[${problem.id}] Raw Gemini response: "${responseText}"`);
 
     let status = 'rejected';
     let reason = 'AI analysis determined the content was inappropriate.';
-
-    if (responseText.startsWith('SAFE')) {
+    
+    // This is the new, more robust check. It looks for "SAFE" case-insensitively.
+    if (/SAFE/i.test(responseText)) {
         status = 'approved';
         reason = null;
     } else if (responseText.startsWith('UNSAFE')) {
