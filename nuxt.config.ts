@@ -1,6 +1,14 @@
 export default defineNuxtConfig({
   compatibilityDate: '2025-09-13',
-  ssr: true,
+  app: {
+    head: {
+      // Add this link tag for your favicon
+      link: [
+        { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }
+      ]
+    }
+  },
+  ssr: true,
   css: [
     'vuetify/styles',
     '@mdi/font/css/materialdesignicons.min.css',
