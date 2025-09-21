@@ -18,10 +18,10 @@
       </v-sheet>
 
       <!-- "The Problem" Section -->
-      <v-sheet id="about" class="py-16" style="background-color: #475569 !important">
+      <v-sheet id="about" class="py-16 bg-grey-darken-3">
         <v-container>
           <div class="text-center mb-12">
-            <h2 class="text-h4 font-weight-bold text-white">Tired of Online Arguments?</h2>
+            <h2 class="text-h4 font-weight-bold">Tired of Online Arguments?</h2>
             <p class="text-body-1 text-grey-lighten-1 mt-4 mx-auto" style="max-width: 600px;">
               Modern social media is built for conflict, not consensus. It's about scoring points and humiliating the "other side." We believe there's a better way.
             </p>

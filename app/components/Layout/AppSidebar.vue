@@ -1,8 +1,10 @@
+<!-- /components/Layout/AppSideBar.vue -->
 <template>
   <v-navigation-drawer
     class="app-sidebar"
     permanent
     :rail="mobile"
+    app 
   >
     <LayoutSidebarHeader />
 
@@ -39,11 +41,11 @@ defineEmits(['open-submit-dialog']);
 </script>
 
 <style scoped>
+/* The position: fixed CSS has been removed. 
+  The `app` prop on v-navigation-drawer handles this behavior correctly now.
+  You can keep other styling here if you need it.
+*/
 .app-sidebar {
-  position: fixed !important;
-  top: 0;
-  left: 0;
-  height: 100vh !important;
-  /* Using !important to override any conflicting styles */
+  /* You can keep styles here, but avoid positioning properties like position, top, left, etc. */
 }
 </style>

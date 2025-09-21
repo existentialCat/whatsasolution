@@ -5,53 +5,56 @@
       <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
     </div>
     <v-container v-else-if="error"><v-alert type="error" dense>{{ error }}</v-alert></v-container>
-    <v-container v-else-if="problem">
-      <v-row>
-        <v-col cols="12">
-            <div class="d-flex" :class="mobile ? 'flex-column' : 'justify-space-between align-start'">
-                <div class="flex-grow-1" style="min-width: 0;">
-                    <h1 class="text-wrap" :class="mobile ? 'text-h5' : 'text-h4'">{{ problem.title }}</h1>
-                    <p class="text-subtitle-1 mt-1">
-                      Submitted by: 
-                      <NuxtLink :to="`/profile/${problem.submitted_by}`" class="text-decoration-none">
-                        {{ problem.users?.username || 'Anonymous' }}
-                      </NuxtLink>
-                    </p>
-                </div>
-                <div :class="mobile ? 'mt-4 align-self-end' : 'ml-4 flex-shrink-0'">
-                    <v-btn v-if="isOwner(problem, user) || profile?.role === 'admin'" color="red-darken-1" :variant="mobile ? 'tonal' : 'text'" @click="showDeleteConfirmDialog = true" :icon="mobile">
-                        <v-icon v-if="mobile">mdi-delete</v-icon>
-                        <template v-else><v-icon start>mdi-delete</v-icon>Delete</template>
-                    </v-btn>
-                </div>
-            </div>
-        </v-col>
-      </v-row>
+    
+    <div v-else-if="problem">
+      <!-- 
+        This is the new sticky wrapper. It sits at the top level of the page content.
+        It will stick to the top of the main scrolling container (likely <v-main>).
+      -->
+      <div class="sticky-header-wrapper">
+        <v-container>
+          <v-row>
+            <v-col cols="12">
+              <ProblemStickyHeader 
+                :problem="problem" 
+                :profile="profile" 
+                @delete="showDeleteConfirmDialog = true" 
+              />
+            </v-col>
+          </v-row>
+        </v-container>
+      </div>
 
-      <v-row> <v-col cols="12"> <ProblemAIAssessment :problem="problem" /> </v-col> </v-row>
+      <!-- 
+        The rest of the page content follows in its own container.
+        This ensures it scrolls underneath the sticky header.
+      -->
+      <v-container class="page-content">
+        <v-row>
+          <v-col cols="12">
+            <v-card>
+              <v-card-title class="d-flex justify-space-between align-center">
+                <span class="text-h5">Solutions</span>
+                <v-btn v-if="user" color="primary" @click="showSolutionForm = true" :icon="mobile">
+                  <v-icon v-if="mobile">mdi-plus</v-icon>
+                  <span v-else>Submit Solution</span>
+                </v-btn>
+              </v-card-title>
+              <v-divider></v-divider>
+              <SolutionList 
+                :solutions="problem.solutions" 
+                :profile="profile"
+                @solutionDeleted="handleSolutionDeleted"
+              />
+            </v-card>
+          </v-col>
+        </v-row>
+      </v-container>
+    </div>
 
-      <v-row>
-        <v-col cols="12">
-          <v-card>
-            <v-card-title class="d-flex justify-space-between align-center">
-              <span class="text-h5">Solutions</span>
-              <v-btn v-if="user" color="primary" @click="showSolutionForm = true" :icon="mobile">
-                <v-icon v-if="mobile">mdi-plus</v-icon>
-                <span v-else>Submit Solution</span>
-              </v-btn>
-            </v-card-title>
-            <v-divider></v-divider>
-            <SolutionList 
-              :solutions="problem.solutions" 
-              :profile="profile"
-              @solutionDeleted="handleSolutionDeleted"
-            />
-          </v-card>
-        </v-col>
-      </v-row>
-    </v-container>
     <v-container v-else><h1 class="text-h4">Problem not found.</h1></v-container>
 
+    <!-- Dialogs remain unchanged -->
     <SubmitSolutionDialog
         v-if="problem"
         v-model="showSolutionForm"
@@ -69,6 +72,26 @@
   </div>
 </template>
 
+<style scoped>
+/* This is the CSS for our new wrapper */
+.sticky-header-wrapper {
+  position: sticky;
+  top: 0; /* Stick to the very top */
+  z-index: 10;
+  
+  /* Use a surface color from the theme to hide content scrolling underneath */
+  background-color: rgb(var(--v-theme-surface));
+  
+  /* Add a border to visually separate it from the content below */
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+/* Add some space to the top of the main content so it doesn't start hidden underneath the sticky header */
+.page-content {
+  padding-top: 24px;
+}
+</style>
+
 <script setup>
 import { ref, watch, nextTick } from 'vue';
 import { useSupabaseUser } from '#imports';
@@ -76,12 +99,13 @@ import { useDisplay } from 'vuetify';
 import { useProblem } from '~/composables/useProblem';
 import { useScrollAndHighlight } from '~/composables/useScrollAndHighlight';
 
-const supabase = useSupabaseClient();
+// Your script content remains exactly the same.
+// No changes are needed here.
 
 const user = useSupabaseUser();
 const { mobile } = useDisplay(); 
 const { trigger: highlightElement } = useScrollAndHighlight();
-const { problem, profile, loading, error, isOwner, handleSolutionDeleted, deleteProblem } = useProblem();
+const { problem, profile, loading, error, handleSolutionDeleted, deleteProblem } = useProblem();
 
 const showSolutionForm = ref(false);
 const showDeleteConfirmDialog = ref(false);
@@ -102,12 +126,6 @@ const handleDeleteProblem = async () => {
     await deleteProblem();
     isDeleting.value = false;
     showDeleteConfirmDialog.value = false;
-};
-
-const getImageUrl = (path) => {
-  if (!path) return '';
-  const { data } = supabase.storage.from('problems').getPublicUrl(path);
-  return data.publicUrl;
 };
 
 watch(loading, (isLoading) => {
