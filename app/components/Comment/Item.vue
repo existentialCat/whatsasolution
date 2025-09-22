@@ -10,13 +10,13 @@
       <!-- Display Mode vs. Edit Mode -->
       <div v-if="!isEditing" class="flex-grow-1">
         <v-list-item-title class="font-weight-bold">
-          <NuxtLink :to="`/profile/${comment.submitted_by}`" @click.stop class="text-decoration-none">
+          <NuxtLink :to="`/profile/${comment.users?.slug}`" @click.stop class="text-decoration-none">
             {{ comment.users?.username || 'Anonymous' }}
           </NuxtLink>
         </v-list-item-title>
         <!-- This is the "Replying to" text for replies -->
         <div v-if="comment.replyingToUsername" class="text-caption text-grey-darken-1">
-            Replying to <NuxtLink :to="`/profile/${comment.parent_comment_id}`" class="text-primary text-decoration-none">@{{ comment.replyingToUsername }}</NuxtLink>
+            Replying to <NuxtLink :to="`/profile/${comment.replyingToUser?.slug}`" class="text-primary text-decoration-none">@{{ comment.replyingToUsername }}</NuxtLink>
         </div>
         <p class="py-2 text-body-1">{{ comment.content }}</p>
       </div>

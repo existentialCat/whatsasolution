@@ -18,7 +18,7 @@
               <v-card-title class="text-h6 pt-0 text-wrap">{{ solution.title }}</v-card-title>
               <v-card-subtitle>
                 Submitted by: 
-                <NuxtLink :to="`/profile/${solution.submitted_by}`" @click.stop class="text-decoration-none">
+                <NuxtLink :to="`/profile/${solution.users?.slug}`" @click.stop class="text-decoration-none">
                   {{ solution.users?.username || 'Anonymous' }}
                 </NuxtLink>
               </v-card-subtitle>
@@ -41,7 +41,7 @@
                 <v-card-title class="text-h6 pt-0 text-wrap px-0">{{ solution.title }}</v-card-title>
                 <v-card-subtitle class="px-0">
                     Submitted by: 
-                    <NuxtLink :to="`/profile/${solution.submitted_by}`" @click.stop class="text-decoration-none">
+                    <NuxtLink :to="`/profile/${solution.users?.slug}`" @click.stop class="text-decoration-none">
                     {{ solution.users?.username || 'Anonymous' }}
                     </NuxtLink>
                 </v-card-subtitle>

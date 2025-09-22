@@ -21,9 +21,6 @@ const props = defineProps({
 
 defineEmits(['delete']);
 
-onMounted(() => {
-  console.log('Sticky header content has successfully mounted.');
-});
 </script>
 
 <style scoped>

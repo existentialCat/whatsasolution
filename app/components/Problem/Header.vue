@@ -5,7 +5,7 @@
             <h1 class="text-wrap" :class="mobile ? 'text-h5' : 'text-h4'">{{ problem.title }}</h1>
             <p class="text-subtitle-1 mt-1">
               Submitted by: 
-              <NuxtLink :to="`/profile/${problem.submitted_by}`" class="text-decoration-none">
+              <NuxtLink :to="`/profile/${problem.users?.slug}`" class="text-decoration-none">
                 {{ problem.users?.username || 'Anonymous' }}
               </NuxtLink>
             </p>

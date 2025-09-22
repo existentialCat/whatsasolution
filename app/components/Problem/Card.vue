@@ -14,7 +14,7 @@
         <!-- User Info -->
         <div class="d-flex justify-space-between align-center">
             <div>
-                <NuxtLink :to="`/profile/${problem.submitted_by}`" class="text-decoration-none font-weight-bold text-black">
+                <NuxtLink :to="`/profile/${problem.users?.slug}`" class="text-decoration-none font-weight-bold text-black">
                     {{ problem.users?.username || 'Anonymous' }}
                 </NuxtLink>
                 <span class="text-grey-darken-1"> · {{ timeAgo }}</span>

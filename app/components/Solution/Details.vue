@@ -18,7 +18,7 @@
         <h1 class="text-h4 mb-2">{{ solution.title }}</h1>
         <v-card-subtitle class="mb-4">
           Submitted by: 
-          <NuxtLink :to="`/profile/${solution.submitted_by}`" class="text-decoration-none">
+          <NuxtLink :to="`/profile/${solution.users?.slug}`" class="text-decoration-none">
             {{ solution.users?.username || 'Anonymous' }}
           </NuxtLink>
         </v-card-subtitle>
@@ -32,7 +32,7 @@
             <h1 class="text-h5 mb-2">{{ solution.title }}</h1>
             <v-card-subtitle class="px-0 mb-4">
               Submitted by: 
-              <NuxtLink :to="`/profile/${solution.submitted_by}`" class="text-decoration-none">
+              <NuxtLink :to="`/profile/${solution.users?.slug}`" class="text-decoration-none">
                 {{ solution.users?.username || 'Anonymous' }}
               </NuxtLink>
             </v-card-subtitle>
