@@ -1,9 +1,9 @@
 <template>
   <v-list-item
-    :to="notification.link"
+    @click="handleClick"
     :class="{ 'unread-notification': !notification.is_read }"
     class="pa-4 notification-item"
-    @click="handleClick"
+    style="cursor: pointer;"
   >
     <template v-slot:prepend>
         <v-icon :icon="notification.icon" size="large" class="mr-4" :color="iconColor"></v-icon>
@@ -43,6 +43,8 @@
 
 <script setup>
 import { computed } from 'vue';
+// 2. IMPORT useRouter to handle navigation programmatically
+import { useRouter } from '#imports';
 import { useNotifications } from '~/composables/useNotifications';
 
 const props = defineProps({
@@ -52,12 +54,16 @@ const props = defineProps({
     }
 });
 
-// ✅ UPDATED: Import the new, more specific function
+const router = useRouter();
 const { markSingleNotificationAsRead } = useNotifications();
 
-// ✅ ADDED: A handler to call the function with this component's specific notification
-const handleClick = () => {
-  markSingleNotificationAsRead(props.notification);
+// 3. UPDATED handleClick to be async and to control navigation
+const handleClick = async () => {
+  // First, mark the notification as read and wait for the action to complete
+  await markSingleNotificationAsRead(props.notification);
+  
+  // THEN, navigate to the destination link
+  router.push(props.notification.link);
 };
 
 const triggeringUsername = computed(() => props.notification.triggering_user?.username);

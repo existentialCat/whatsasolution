@@ -1,4 +1,4 @@
-<!-- pages/problems/[id].vue -->
+<!-- pages/problems/[slug].vue -->
 <template>
   <div>
     <div v-if="loading" class="text-center pa-10">
@@ -7,11 +7,8 @@
     <v-container v-else-if="error"><v-alert type="error" dense>{{ error }}</v-alert></v-container>
     
     <div v-else-if="problem">
-      <!-- 
-        This is the new sticky wrapper. It sits at the top level of the page content.
-        It will stick to the top of the main scrolling container (likely <v-main>).
-      -->
-      <div class="sticky-header-wrapper">
+      <!-- The sticky header is now outside the main v-container for correct positioning -->
+       <div class="sticky-header-wrapper">
         <v-container>
           <v-row>
             <v-col cols="12">
@@ -25,12 +22,15 @@
         </v-container>
       </div>
 
-      <!-- 
-        The rest of the page content follows in its own container.
-        This ensures it scrolls underneath the sticky header.
-      -->
-      <v-container class="page-content">
-        <v-row>
+      <!-- The rest of the page content is in its own container -->
+      <v-container>
+        <v-row v-if="problem.imgs" class="mt-4">
+          <v-col cols="12">
+            <ProblemImage :problem="problem" />
+          </v-col>
+        </v-row>
+
+        <v-row class="mt-4">
           <v-col cols="12">
             <v-card>
               <v-card-title class="d-flex justify-space-between align-center">
@@ -50,25 +50,23 @@
           </v-col>
         </v-row>
       </v-container>
+
+      <SubmitSolutionDialog
+          v-if="problem"
+          v-model="showSolutionForm"
+          :problem-id="problem.id"
+          @solution-submitted="handleSolutionSubmitted"
+      />
+      <ConfirmationDialog
+          v-model="showDeleteConfirmDialog"
+          title="Confirm Deletion"
+          message="Are you sure you want to delete this problem and all related content? This cannot be undone."
+          confirm-text="Delete"
+          :loading="isDeleting"
+          @confirm="handleDeleteProblem"
+      />
     </div>
-
     <v-container v-else><h1 class="text-h4">Problem not found.</h1></v-container>
-
-    <!-- Dialogs remain unchanged -->
-    <SubmitSolutionDialog
-        v-if="problem"
-        v-model="showSolutionForm"
-        :problem-id="problem.id"
-        @solution-submitted="handleSolutionSubmitted"
-    />
-    <ConfirmationDialog
-        v-model="showDeleteConfirmDialog"
-        title="Confirm Deletion"
-        message="Are you sure you want to delete this problem and all related content? This cannot be undone."
-        confirm-text="Delete"
-        :loading="isDeleting"
-        @confirm="handleDeleteProblem"
-    />
   </div>
 </template>
 
@@ -98,9 +96,6 @@ import { useSupabaseUser } from '#imports';
 import { useDisplay } from 'vuetify'; 
 import { useProblem } from '~/composables/useProblem';
 import { useScrollAndHighlight } from '~/composables/useScrollAndHighlight';
-
-// Your script content remains exactly the same.
-// No changes are needed here.
 
 const user = useSupabaseUser();
 const { mobile } = useDisplay(); 

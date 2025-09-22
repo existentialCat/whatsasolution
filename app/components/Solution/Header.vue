@@ -1,6 +1,6 @@
 <!-- components/SolutionHeader.vue -->
 <template>
-  <v-card v-if="problem" variant="tonal" class="mb-6" :to="`/problems/${problem.id}`" hover>
+  <v-card v-if="problem" variant="tonal" class="mb-6" :to="`/problems/${problem.slug}`" hover>
     <v-card-text class="d-flex align-center">
       <v-icon class="mr-3">mdi-lightbulb-on-outline</v-icon>
       <div>

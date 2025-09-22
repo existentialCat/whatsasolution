@@ -4,14 +4,21 @@
     class="app-sidebar"
     permanent
     :rail="mobile"
-    app 
   >
     <LayoutSidebarHeader />
 
     <v-list density="compact" nav>
       <v-list-item prepend-icon="mdi-home-variant-outline" title="Problems" to="/problems" rounded="xl"></v-list-item>
       <LayoutNotificationMenu v-if="user" />
-      <v-list-item v-if="user" prepend-icon="mdi-account-outline" title="Profile" :to="`/profile/${user.id}`" rounded="xl"></v-list-item>
+      <!-- This is the key fix: The button is now always visible for logged-in users but disabled while the profile loads. -->
+      <v-list-item
+        v-if="user"
+        prepend-icon="mdi-account-outline"
+        title="Profile"
+        :to="`/profile/${profile?.slug}`"
+        :disabled="!profile || !profile.slug"
+        rounded="xl"
+      ></v-list-item>
     </v-list>
 
     <v-spacer></v-spacer>
@@ -34,18 +41,14 @@
 <script setup>
 import { useDisplay } from 'vuetify';
 import { useSupabaseUser } from '#imports';
+import { useUserProfile } from '~/composables/useUserProfile';
 
 const user = useSupabaseUser();
 const { mobile } = useDisplay();
+const { profile } = useUserProfile(); // Fetch profile to get the slug
 defineEmits(['open-submit-dialog']);
 </script>
 
 <style scoped>
-/* The position: fixed CSS has been removed. 
-  The `app` prop on v-navigation-drawer handles this behavior correctly now.
-  You can keep other styling here if you need it.
-*/
-.app-sidebar {
-  /* You can keep styles here, but avoid positioning properties like position, top, left, etc. */
-}
 </style>
+

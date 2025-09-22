@@ -1,4 +1,4 @@
-<!-- pages/profile/[id].vue -->
+<!-- pages/profile/[slug].vue -->
 <template>
   <div v-if="isLoading" class="d-flex justify-center align-center" style="height: 80vh;">
     <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
@@ -41,7 +41,7 @@
             v-for="problem in problems"
             :key="problem.id"
             :title="problem.title"
-            :to="`/problems/${problem.id}`"
+            :to="`/problems/${problem.slug}`"
             class="border-b"
           >
               <template v-slot:prepend>
@@ -57,16 +57,16 @@
       <!-- Solutions Feed -->
       <v-window-item value="solutions">
         <div v-if="groupedSolutions.length > 0">
-          <div v-for="group in groupedSolutions" :key="group.id" class="mb-6">
+          <div v-for="group in groupedSolutions" :key="group.problem_id" class="mb-6">
               <h3 class="text-h6 font-weight-medium mb-2">
-                <NuxtLink :to="`/problems/${group.id}`" class="text-decoration-none text-primary">{{ group.title }}</NuxtLink>
+                <NuxtLink :to="`/problems/${group.problem_slug}`" class="text-decoration-none text-primary">{{ group.problem_title }}</NuxtLink>
               </h3>
               <v-list lines="one" class="border rounded">
                 <v-list-item
                   v-for="solution in group.solutions"
                   :key="solution.id"
                   :title="solution.title"
-                  :to="`/problems/${solution.parent_problem}#solution-${solution.id}`"
+                  :to="`/solutions/${solution.slug}`"
                 >
                   <template v-slot:prepend>
                     <v-icon>mdi-lightbulb-on</v-icon>
@@ -88,7 +88,7 @@
             :key="comment.id"
             :title="`&quot;${comment.content}&quot;`"
             :subtitle="`In reply to a solution for: ${comment.solutions?.problems?.title || 'a problem'}`"
-            :to="`/solutions/${comment.parent_solution}#comment-${comment.id}`"
+            :to="`/solutions/${comment.solutions.slug}#comment-${comment.id}`"
             class="border-b"
            >
              <template v-slot:prepend>
@@ -110,7 +110,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useSupabaseClient, useSupabaseUser } from '#imports';
 import { useRoute } from 'vue-router';
 
@@ -125,74 +125,51 @@ const comments = ref([]);
 const isLoading = ref(true);
 const tab = ref('problems');
 
-const profileId = computed(() => route.params.id);
-const isOwnProfile = computed(() => user.value && user.value.id === profileId.value);
+const profileSlug = computed(() => route.params.slug);
+const isOwnProfile = computed(() => user.value && profile.value && user.value.id === profile.value.id);
 
 const groupedSolutions = computed(() => {
     if (!solutions.value || solutions.value.length === 0) return [];
     
     const groups = solutions.value.reduce((acc, solution) => {
         if (!solution.problems) return acc;
+        const { id: problem_id, title: problem_title, slug: problem_slug } = solution.problems;
 
-        const problemId = solution.problems.id;
-        const problemTitle = solution.problems.title;
-
-        if (!acc[problemId]) {
-            acc[problemId] = {
-                id: problemId,
-                title: problemTitle,
-                solutions: [],
-                mostRecentSolutionDate: solution.created_at
-            };
+        if (!acc[problem_id]) {
+            acc[problem_id] = { problem_id, problem_title, problem_slug, solutions: [], mostRecentSolutionDate: solution.created_at };
         }
-        acc[problemId].solutions.push(solution);
+        acc[problem_id].solutions.push(solution);
         return acc;
     }, {});
     
     return Object.values(groups).sort((a, b) => new Date(b.mostRecentSolutionDate) - new Date(a.mostRecentSolutionDate));
 });
 
-onMounted(async () => {
-    if (profileId.value) {
-        const { data: profileData } = await supabase.from('users').select('username').eq('id', profileId.value).single();
-        
-        if (profileData) {
-            profile.value = profileData;
+const fetchData = async (slug) => {
+    isLoading.value = true;
+    const { data: profileData } = await supabase.from('users').select('id, username').eq('slug', slug).single();
+    
+    if (profileData) {
+        profile.value = profileData;
+        const profileId = profileData.id;
 
-            const commentsQuery = supabase
-                .from('comments')
-                .select(`
-                    id, content, created_at, parent_solution,
-                    solutions!inner (
-                        parent_problem,
-                        problems!solutions_parent_problem_fkey ( title )
-                    )
-                `)
-                .eq('submitted_by', profileId.value)
-                .order('created_at', { ascending: false });
-            
-            const solutionsQuery = supabase
-                .from('solutions')
-                .select(`
-                    id, title, created_at, parent_problem,
-                    problems!solutions_parent_problem_fkey ( id, title )
-                `)
-                .eq('submitted_by', profileId.value)
-                .order('created_at', { ascending: false });
+        // This is the key fix: The query for comments now fetches the solution's slug.
+        const [problemsRes, solutionsRes, commentsRes] = await Promise.all([
+            supabase.from('problems').select('id, title, slug, created_at').eq('submitted_by', profileId).order('created_at', { ascending: false }),
+            supabase.from('solutions').select(`id, title, slug, created_at, parent_problem, problems!inner(id, title, slug)`).eq('submitted_by', profileId).order('created_at', { ascending: false }),
+            supabase.from('comments').select(`id, content, created_at, solutions!inner(slug, problems!inner(title))`).eq('submitted_by', profileId).order('created_at', { ascending: false })
+        ]);
 
-            const [problemsRes, solutionsRes, commentsRes] = await Promise.all([
-                supabase.from('problems').select('id, title, created_at').eq('submitted_by', profileId.value).order('created_at', { ascending: false }),
-                solutionsQuery,
-                commentsQuery
-            ]);
-
-            if (problemsRes.data) problems.value = problemsRes.data;
-            if (solutionsRes.data) solutions.value = solutionsRes.data;
-            if (commentsRes.data) comments.value = commentsRes.data;
-        }
+        if (problemsRes.data) problems.value = problemsRes.data;
+        if (solutionsRes.data) solutions.value = solutionsRes.data;
+        if (commentsRes.data) comments.value = commentsRes.data;
     }
     isLoading.value = false;
-});
+};
+
+watch(profileSlug, (newSlug) => {
+    if (newSlug) fetchData(newSlug);
+}, { immediate: true });
 </script>
 
 <style scoped>

@@ -1,5 +1,5 @@
 // composables/useProblem.js
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useSupabaseClient, useSupabaseUser } from '#imports';
 import { useViews } from '~/composables/useViews';
@@ -20,26 +20,49 @@ export function useProblem() {
   let problemChannel = null;
   let solutionsChannel = null;
   
-  const fetchProblemDetails = async () => {
-    const { data, error: rpcError } = await supabase.rpc('get_problem_details', {
-        p_problem_id: route.params.id,
-        p_user_id: user.value?.id,
-    });
-    if (rpcError) throw rpcError;
-    problem.value = data && data.length > 0 ? data[0] : null;
+  const fetchProblemDetails = async (slug) => {
+    if (!slug) {
+      problem.value = null;
+      loading.value = false;
+      return;
+    }
 
-    if (problem.value && problem.value.solutions) {
-        const solutionIds = problem.value.solutions.map(s => s.id);
-        await recordSolutionViews(solutionIds);
+    loading.value = true;
+    error.value = null;
+    try {
+        const { data, error: rpcError } = await supabase.rpc('get_problem_details', {
+            p_problem_slug: slug,
+            p_user_id: user.value?.id,
+        });
+        if (rpcError) throw rpcError;
+        problem.value = data && data.length > 0 ? data[0] : null;
+
+        if (problem.value && problem.value.solutions) {
+            const solutionIds = problem.value.solutions.map(s => s.id);
+            await recordSolutionViews(solutionIds);
+        }
+    } catch (e) {
+        console.error("Error fetching problem details:", e);
+        error.value = "Failed to load page data.";
+        problem.value = null;
+    } finally {
+        loading.value = false;
     }
   };
 
   const fetchUserProfile = async () => {
-    if (!user.value) return;
-    const { data: profileData, error: profileError } = await supabase
-        .from('users').select('role, username').eq('id', user.value.id).single();
-    if (profileError) throw profileError;
-    profile.value = profileData;
+    if (!user.value) {
+        profile.value = null;
+        return;
+    };
+    try {
+        const { data: profileData, error: profileError } = await supabase
+            .from('users').select('role, username').eq('id', user.value.id).single();
+        if (profileError) throw profileError;
+        profile.value = profileData;
+    } catch (e) {
+        console.error("Error fetching user profile:", e);
+    }
   };
 
   const handleSolutionDeleted = (deletedSolutionId) => {
@@ -62,60 +85,50 @@ export function useProblem() {
     }
   };
 
-  onMounted(async () => {
-    loading.value = true;
-    error.value = null;
-    const problemId = route.params.id;
-    try {
-      await Promise.all([fetchProblemDetails(), fetchUserProfile()]);
-      
-      if (problem.value) {
-          problemChannel = supabase.channel(`problem-assessment:${problemId}`)
-              .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'problems', filter: `id=eq.${problemId}`}, 
-              (payload) => {
-                 if (problem.value) {
-                    problem.value.ai_assessment_status = payload.new.ai_assessment_status;
-                    problem.value.ai_fact_check = payload.new.ai_fact_check;
-                    problem.value.ai_parody_probability = payload.new.ai_parody_probability;
-                    problem.value.ai_sources = payload.new.ai_sources;
-                    problem.value.image_moderation_status = payload.new.image_moderation_status;
-                    problem.value.image_moderation_reason = payload.new.image_moderation_reason;
-                }
-              })
-              .subscribe();
-          // uncomment to enable realtime voting and ai assessment 
-          // solutionsChannel = supabase.channel(`solution-assessments-for-problem:${problemId}`)
-          //     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'solutions', filter: `parent_problem=eq.${problemId}`},
-          //     (payload) => {
-          //       if (problem.value && problem.value.solutions) {
-          //           const index = problem.value.solutions.findIndex(s => s.id === payload.new.id);
-          //           if (index > -1) {
-          //               Object.assign(problem.value.solutions[index], payload.new);
-          //           }
-          //       }
-          //     })
-          //     .subscribe();
-          solutionsChannel = supabase.channel(`solution-assessments-for-problem:${problemId}`)
-              .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'solutions', filter: `parent_problem=eq.${problemId}`},
-              (payload) => {
-                 if (problem.value && problem.value.solutions) {
+  // This is the key fix: We no longer use Promise.all, which can hide errors.
+  // We now fetch the essential problem details and the auxiliary profile data concurrently but separately.
+  watch(() => route.params.slug, (newSlug) => {
+    if (newSlug) {
+      fetchProblemDetails(newSlug);
+      fetchUserProfile();
+    } else {
+      loading.value = false;
+      problem.value = null;
+    }
+  }, { immediate: true });
+
+  watch(problem, (newProblemValue) => {
+    // Clean up old subscriptions
+    if (problemChannel) supabase.removeChannel(problemChannel);
+    if (solutionsChannel) supabase.removeChannel(solutionsChannel);
+
+    if (newProblemValue) {
+        const problemId = newProblemValue.id;
+        problemChannel = supabase.channel(`problem-assessment:${problemId}`)
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'problems', filter: `id=eq.${problemId}`}, 
+            (payload) => {
+               if (problem.value) {
+                  problem.value.ai_assessment_status = payload.new.ai_assessment_status;
+                  problem.value.ai_fact_check = payload.new.ai_fact_check;
+                  problem.value.ai_parody_probability = payload.new.ai_parody_probability;
+                  problem.value.ai_sources = payload.new.ai_sources;
+                  problem.value.image_moderation_status = payload.new.image_moderation_status;
+                  problem.value.image_moderation_reason = payload.new.image_moderation_reason;
+              }
+            })
+            .subscribe();
+
+        solutionsChannel = supabase.channel(`solution-assessments-for-problem:${problemId}`)
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'solutions', filter: `parent_problem=eq.${problemId}`},
+            (payload) => {
+              if (problem.value && problem.value.solutions) {
                   const index = problem.value.solutions.findIndex(s => s.id === payload.new.id);
                   if (index > -1) {
-                    // Only update the ai_assessment property
-                    problem.value.solutions[index].ai_side_effects = payload.new.ai_side_effects;
-                    problem.value.solutions[index].ai_assessment_status = payload.new.ai_assessment_status;
-                    problem.value.solutions[index].ai_viability_score = payload.new.ai_viability_score;
-                    problem.value.solutions[index].ai_viability_reason = payload.new.ai_viability_reason;
+                      Object.assign(problem.value.solutions[index], payload.new);
                   }
-                }
-              })
-              .subscribe();
-      }
-    } catch (e) {
-      error.value = 'Failed to load page data.';
-      console.error(e);
-    } finally {
-      loading.value = false;
+              }
+            })
+            .subscribe();
     }
   });
 
@@ -126,3 +139,4 @@ export function useProblem() {
 
   return { problem, profile, loading, error, isOwner, handleSolutionDeleted, deleteProblem };
 }
+

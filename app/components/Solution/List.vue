@@ -1,10 +1,9 @@
-<!-- components/SolutionList.vue -->
 <template>
   <div>
     <div v-if="solutions && solutions.length > 0">
       <div v-for="(solution, index) in solutions" :key="solution.id" :id="`solution-${solution.id}`">
-        <v-card-text class="d-flex align-start pa-4">
-          <!-- Voting -->
+        <!-- Desktop Layout (visible on medium screens and up) -->
+        <v-card-text v-if="!mobile" class="d-flex align-start pa-4">
           <div class="d-flex flex-column align-center mr-4">
             <v-btn icon variant="plain" :color="solution.user_vote === 'upvote' ? 'green' : 'grey'" :disabled="votingInProgress.has(solution.id)" @click.stop="handleVote(solution, 'upvote')">
               <v-icon size="x-large">mdi-menu-up</v-icon>
@@ -14,10 +13,8 @@
               <v-icon size="x-large">mdi-menu-down</v-icon>
             </v-btn>
           </div>
-
-          <!-- Content -->
           <div class="flex-grow-1" style="min-width: 0;">
-            <v-card class="solution-card" flat hover @click="navigateToSolution(solution.id)">
+            <v-card class="solution-card" flat hover @click="navigateToSolution(solution.slug)">
               <v-card-title class="text-h6 pt-0 text-wrap">{{ solution.title }}</v-card-title>
               <v-card-subtitle>
                 Submitted by: 
@@ -28,8 +25,6 @@
               <v-card-text><p>{{ solution.description }}</p></v-card-text>
             </v-card>
           </div>
-
-          <!-- Stats & Admin/User Controls -->
           <div class="d-flex flex-column align-end ml-4">
             <div class="d-flex align-center text-grey"><v-icon small class="mr-1">mdi-eye</v-icon><span>{{ solution.views || 0 }}</span></div>
             <div class="d-flex align-center text-grey mt-2"><v-icon small class="mr-1">mdi-comment-text-outline</v-icon><span>{{ solution.comment_count || 0 }}</span></div>
@@ -40,11 +35,55 @@
           </div>
         </v-card-text>
 
-        <!-- This is the new section for the AI Assessment -->
+        <!-- Mobile Layout (visible on small screens) -->
+        <v-card-text v-else class="pa-4">
+            <div @click="navigateToSolution(solution.slug)">
+                <v-card-title class="text-h6 pt-0 text-wrap px-0">{{ solution.title }}</v-card-title>
+                <v-card-subtitle class="px-0">
+                    Submitted by: 
+                    <NuxtLink :to="`/profile/${solution.submitted_by}`" @click.stop class="text-decoration-none">
+                    {{ solution.users?.username || 'Anonymous' }}
+                    </NuxtLink>
+                </v-card-subtitle>
+                <v-card-text class="px-0"><p>{{ solution.description }}</p></v-card-text>
+            </div>
+            <v-card-actions class="px-0">
+                <!-- Mobile Voting -->
+                <v-btn icon variant="text" size="small" :color="solution.user_vote === 'upvote' ? 'green' : 'grey-darken-1'" @click.stop="handleVote(solution, 'upvote')">
+                    <v-icon>mdi-arrow-up-bold-outline</v-icon>
+                </v-btn>
+                <span class="font-weight-bold mx-1">{{ (solution.upvotes || 0) - (solution.downvotes || 0) }}</span>
+                <v-btn icon variant="text" size="small" :color="solution.user_vote === 'downvote' ? 'red' : 'grey-darken-1'" @click.stop="handleVote(solution, 'downvote')">
+                    <v-icon>mdi-arrow-down-bold-outline</v-icon>
+                </v-btn>
+                <v-spacer></v-spacer>
+                <!-- Mobile Stats and Controls -->
+                 <div class="d-flex align-center text-grey-darken-1">
+                    <v-icon small class="mr-1">mdi-eye-outline</v-icon><span>{{ solution.views || 0 }}</span>
+                    <v-icon small class="ml-3 mr-1">mdi-comment-text-outline</v-icon><span>{{ solution.comment_count || 0 }}</span>
+                 </div>
+                <v-menu v-if="isOwner(solution) || profile?.role === 'admin'" location="top end">
+                    <template v-slot:activator="{ props }">
+                        <v-btn v-bind="props" icon="mdi-dots-vertical" variant="text" size="small"></v-btn>
+                    </template>
+                    <v-list>
+                        <v-list-item v-if="isOwner(solution) && canEdit(solution)" @click="openEditDialog(solution)">
+                            <template v-slot:prepend><v-icon>mdi-pencil</v-icon></template>
+                            <v-list-item-title>Edit</v-list-item-title>
+                        </v-list-item>
+                        <v-list-item @click="openConfirmDialog(solution)">
+                             <template v-slot:prepend><v-icon>mdi-delete</v-icon></template>
+                            <v-list-item-title class="text-red">Delete</v-list-item-title>
+                        </v-list-item>
+                    </v-list>
+                </v-menu>
+            </v-card-actions>
+        </v-card-text>
+        
         <div class="px-4 pb-2">
             <SolutionAIAssessment :solution="solution" />
         </div>
-
+        
         <v-divider v-if="index < solutions.length - 1"></v-divider>
       </div>
     </div>
@@ -102,25 +141,22 @@
 <script setup>
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { useSupabaseClient } from '#imports';
+import { useSupabaseClient, useSupabaseUser } from '#imports';
+import { useDisplay } from 'vuetify';
 import { useVoting } from '~/composables/useVoting';
 import { usePermissions } from '~/composables/usePermissions';
 
 const props = defineProps({
-  solutions: {
-    type: Array,
-    required: true,
-  },
-  profile: {
-    type: Object,
-    default: null
-  }
+  solutions: { type: Array, required: true, },
+  profile: { type: Object, default: null }
 });
 
 const emit = defineEmits(['solutionDeleted']);
 
 const supabase = useSupabaseClient();
+const user = useSupabaseUser();
 const router = useRouter();
+const { mobile } = useDisplay();
 const { votingInProgress, handleVote } = useVoting();
 const { isOwner, canEdit } = usePermissions();
 
@@ -131,7 +167,11 @@ const showEditDialog = ref(false);
 const solutionToEdit = ref(null);
 const editForm = ref({ title: '', description: '' });
 
-const navigateToSolution = (solutionId) => router.push(`/solutions/${solutionId}`);
+const navigateToSolution = (slug) => {
+    if (slug) {
+        router.push(`/solutions/${slug}`);
+    }
+};
 
 const openConfirmDialog = (solution) => {
     solutionToDelete.value = solution;
@@ -142,11 +182,7 @@ const deleteSolution = async () => {
     if (!solutionToDelete.value) return;
     isDeleting.value = true;
     try {
-        const request = props.profile?.role === 'admin'
-            ? supabase.rpc('delete_solution_with_dependencies', { solution_id_to_delete: solutionToDelete.value.id })
-            : supabase.from('solutions').delete().eq('id', solutionToDelete.value.id);
-
-        const { error } = await request;
+        const { error } = await supabase.from('solutions').delete().eq('id', solutionToDelete.value.id);
         if (error) throw error;
         emit('solutionDeleted', solutionToDelete.value.id);
         showConfirmDialog.value = false;
@@ -186,4 +222,3 @@ const updateSolution = async () => {
     }
 };
 </script>
-

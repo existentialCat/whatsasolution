@@ -1,7 +1,7 @@
 // composables/useSolution.js
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { ref, onUnmounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { useSupabaseClient, useSupabaseUser } from '#imports';
+import { useSupabaseClient, useSupabaseUser, useAsyncData } from '#imports';
 import { useViews } from '~/composables/useViews';
 import { useScrollAndHighlight } from '~/composables/useScrollAndHighlight';
 
@@ -12,72 +12,70 @@ export function useSolution() {
   const { recordSolutionViews } = useViews();
   const { trigger: highlightElement } = useScrollAndHighlight();
 
-  const solution = ref(null);
-  const loading = ref(true);
-  const error = ref(null);
   let channel = null;
 
-  const fetchSolutionDetails = async () => {
-    const solutionId = route.params.id;
-    try {
+  // This is the key fix: We now use useAsyncData as the primary data fetcher.
+  const { data: solution, pending: loading, error } = useAsyncData(
+    `solution-${route.params.slug}`, // A unique key for this fetch
+    async () => {
+      const slug = route.params.slug;
+      if (!slug) return null;
+
       const { data, error: fetchError } = await supabase
         .from('solutions')
         .select(`
           *,
           submitted_by, 
           users (username),
-          problems!solutions_parent_problem_fkey (id, title)
+          problems!inner (id, title, slug)
         `)
-        .eq('id', solutionId)
+        .eq('slug', slug)
         .single();
 
       if (fetchError) throw fetchError;
 
       let userVote = null;
       if (user.value) {
-          const { data: voteData, error: voteError } = await supabase
+          const { data: voteData } = await supabase
               .from('solution_votes')
               .select('vote_type')
-              .eq('solution_id', solutionId)
+              .eq('solution_id', data.id)
               .eq('user_id', user.value.id)
               .limit(1);
-
-          if (voteError) throw voteError;
-
-          if (voteData && voteData.length > 0) {
-              userVote = voteData[0].vote_type;
-          }
+          if (voteData && voteData.length > 0) userVote = voteData[0].vote_type;
       }
-
-      solution.value = { ...data, user_vote: userVote };
       
-      await recordSolutionViews([solutionId]);
-
-    } catch (e) {
-      console.error('Error fetching solution details:', e);
-      error.value = 'Failed to load the solution.';
+      await recordSolutionViews([data.id]);
+      
+      return { ...data, user_vote: userVote };
+    },
+    {
+      watch: [() => route.params.slug] // Automatically re-fetch when the slug changes
     }
-  };
+  );
 
-  onMounted(async () => {
-    loading.value = true;
-    await fetchSolutionDetails();
-    loading.value = false;
-
-    if (solution.value) {
-        channel = supabase.channel(`solution-update:${solution.value.id}`)
-            .on('postgres_changes', {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'solutions',
-                filter: `id=eq.${solution.value.id}`
-            }, (payload) => {
-                Object.assign(solution.value, payload.new);
-            })
-            .subscribe();
+  // Set up the real-time listener when the solution data is available.
+  watch(solution, (newSolutionValue, oldSolutionValue) => {
+    if (channel) {
+      supabase.removeChannel(channel);
+      channel = null;
     }
-  });
-
+    if (newSolutionValue) {
+      channel = supabase.channel(`solution-update:${newSolutionValue.id}`)
+        .on('postgres_changes', {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'solutions',
+            filter: `id=eq.${newSolutionValue.id}`
+        }, (payload) => {
+            // Merge the new data into the existing solution object
+            Object.assign(solution.value, payload.new);
+        })
+        .subscribe();
+    }
+  }, { immediate: true });
+  
+  // Highlighting logic
   watch(loading, (isLoading) => {
       if (!isLoading && solution.value) {
           highlightElement();
@@ -96,3 +94,4 @@ export function useSolution() {
 
   return { solution, loading, error };
 }
+

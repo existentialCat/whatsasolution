@@ -5,23 +5,22 @@ export function useUserProfile() {
   const user = useSupabaseUser();
   const supabase = useSupabaseClient();
 
-  // This is the key fix: The useAsyncData function now has a try/catch
-  // block and will always return a value.
   const { data: profile } = useAsyncData(
-    'user-profile-data', // Use a unique key for this data fetch
+    'user-profile-data',
     async () => {
-      if (!user.value) return null; // Always return a value
+      if (!user.value) return null;
       try {
+        // This is the key fix: We now select the 'slug' column.
         const { data, error } = await supabase
           .from('users')
-          .select('username, role')
+          .select('username, role, slug') // Added slug
           .eq('id', user.value.id)
           .single();
         if (error) throw error;
         return data;
       } catch (e) {
         console.error('Error fetching user profile:', e);
-        return null; // Explicitly return null on error
+        return null;
       }
     },
     { watch: [user] }
@@ -29,3 +28,4 @@ export function useUserProfile() {
 
   return { profile };
 }
+
