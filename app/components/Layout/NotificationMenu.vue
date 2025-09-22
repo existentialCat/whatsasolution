@@ -1,4 +1,3 @@
-<!-- /components/Layout/NotificationMenu.vue -->
 <template>
   <v-list-item
     to="/notifications"
@@ -15,8 +14,12 @@
 </template>
 
 <script setup>
-import { useNotifications } from '~/composables/useNotifications';
+import { useState, computed } from '#imports';
 
-const { unreadCount } = useNotifications();
+// Get state DIRECTLY from useState
+const notifications = useState('notifications', () => []);
+
+const unreadCount = computed(() => {
+  return notifications.value.filter(n => !n.is_read).length;
+});
 </script>
-

@@ -20,7 +20,11 @@
         </v-row>
         <v-row>
           <v-col cols="12">
-              <SolutionDetails :solution="solution" />
+              <SolutionDetails 
+                :solution="solution"
+                :handle-vote="handleVote"
+                :voting-in-progress="votingInProgress"
+              />
           </v-col>
         </v-row>
         <v-row>
@@ -67,12 +71,14 @@
 </style>
 
 <script setup>
-import { watch } from 'vue';
-import { useRoute, useSupabaseClient, useAsyncData, createError } from '#imports';
+import { watch, reactive } from 'vue';
+import { useRoute, useSupabaseClient, useSupabaseUser, useAsyncData, createError } from '#imports';
 import { useScrollAndHighlight } from '~/composables/useScrollAndHighlight';
+import { useVoting } from '~/composables/useVoting';
 
 const route = useRoute();
 const supabase = useSupabaseClient();
+const user = useSupabaseUser();
 const slug = route.params.slug;
 
 const { data: solution, pending, error } = await useAsyncData(
@@ -80,7 +86,8 @@ const { data: solution, pending, error } = await useAsyncData(
   async () => {
     const { data, error } = await supabase
       .from('solutions')
-      .select('*, users(*), problems(*)')
+      // ✅ UPDATED: Join solution_votes to get the current user's vote
+      .select('*, users(*), problems(*), solution_votes(user_id, vote_type)')
       .eq('slug', slug)
       .single();
 
@@ -89,22 +96,26 @@ const { data: solution, pending, error } = await useAsyncData(
     }
     
     return data;
+  },
+  {
+    transform: (data) => {
+      if (!data) return null;
+      // Process the result to create the 'user_vote' property
+      const vote = user.value ? data.solution_votes.find(v => v.user_id === user.value.id) : null;
+      data.user_vote = vote ? vote.vote_type : null;
+      return reactive(data);
+    },
   }
 );
 
-// ✅ --- START OF THE FIX ---
+const { votingInProgress, handleVote } = useVoting();
 
-// 1. Import and instantiate the composable
 const { trigger: triggerScroll } = useScrollAndHighlight();
-
-// 2. Watch the 'solution' data. Once it loads, trigger the scroll and highlight.
 watch(solution, (newSolution) => {
   if (newSolution) {
     triggerScroll();
   }
 }, {
-  immediate: true // Run the watcher immediately on component load
+  immediate: true
 });
-
-// ✅ --- END OF THE FIX ---
 </script>

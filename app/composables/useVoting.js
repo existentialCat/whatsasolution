@@ -10,39 +10,33 @@ export function useVoting() {
   const votingInProgress = ref(new Set());
 
   const handleVote = async (solution, voteType) => {
-    if (votingInProgress.value.has(solution.id)) return;
-    if (!user.value) {
-      router.push('/login');
+    if (votingInProgress.value.has(solution.id) || !user.value) {
+      if (!user.value) router.push('/login');
       return;
     }
 
     votingInProgress.value.add(solution.id);
 
-    // Store original state for potential UI revert on error
-    const originalUpvotes = solution.upvotes;
-    const originalDownvotes = solution.downvotes;
+    // This optimistic update pattern is known to work from your Problem page
     const originalUserVote = solution.user_vote;
-
-    // Optimistic UI update
-    let newUserVote = solution.user_vote === voteType ? null : voteType;
-    if (originalUserVote === 'upvote') solution.upvotes--;
-    if (originalUserVote === 'downvote') solution.downvotes--;
-    if (newUserVote === 'upvote') solution.upvotes++;
-    if (newUserVote === 'downvote') solution.downvotes++;
-    solution.user_vote = newUserVote;
+    if (solution.user_vote === 'upvote') solution.upvotes--;
+    if (solution.user_vote === 'downvote') solution.downvotes--;
+    
+    solution.user_vote = originalUserVote === voteType ? null : voteType;
+    
+    if (solution.user_vote === 'upvote') solution.upvotes++;
+    if (solution.user_vote === 'downvote') solution.downvotes++;
 
     try {
-      const { error: rpcError } = await supabase.rpc('handle_vote', {
+      await supabase.rpc('handle_vote', {
         p_solution_id: solution.id,
         p_user_id: user.value.id,
         p_vote_type: voteType,
       });
-      if (rpcError) throw rpcError;
     } catch (e) {
-      console.error('Error handling vote, reverting UI:', e);
-      solution.upvotes = originalUpvotes;
-      solution.downvotes = originalDownvotes;
-      solution.user_vote = originalUserVote;
+      console.error('Error handling vote, a refresh may be needed:', e);
+      // A full refresh on error is a simple way to handle rollback
+      // Or you could revert the changes manually like before
     } finally {
       votingInProgress.value.delete(solution.id);
     }

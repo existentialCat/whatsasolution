@@ -2,9 +2,12 @@
   <v-container>
     <div class="d-flex justify-space-between align-center mb-4">
       <h1 class="text-h4">Notifications</h1>
-      <v-btn v-if="unreadCount > 0" @click="markNotificationsAsRead" color="primary" variant="tonal" size="small">
-        Mark all as read
-      </v-btn>
+      
+      <ClientOnly>
+        <v-btn v-if="unreadCount > 0" @click="markNotificationsAsRead" color="primary" variant="tonal" size="small">
+          Mark all as read
+        </v-btn>
+      </ClientOnly>
     </div>
 
     <ClientOnly>
@@ -42,13 +45,19 @@
   </v-container>
 </template>
 
-<style scoped>
-/* Scoped styles are no longer needed here as they are handled by the component */
-</style>
-
 <script setup>
-import { useNotifications } from '~/composables/useNotifications';
-import NotificationItem from '~/components/NotificationItem.vue'; // Import the new component
+import { useState, useNuxtApp, computed } from '#imports';
+import NotificationItem from '~/components/NotificationItem.vue';
 
-const { notifications, loading, unreadCount, markNotificationsAsRead } = useNotifications();
+// Get state DIRECTLY from useState
+const notifications = useState('notifications');
+const loading = useState('notifications-loading');
+
+// Get methods DIRECTLY from the plugin
+const { markNotificationsAsRead } = useNuxtApp().$notificationActions;
+
+const unreadCount = computed(() => {
+  if (!notifications.value) return 0;
+  return notifications.value.filter(n => !n.is_read).length;
+});
 </script>

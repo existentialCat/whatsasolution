@@ -1,3 +1,4 @@
+<!-- /layouts/default.vue -->
 <template>
   <v-app>
     <ClientOnly>
@@ -14,9 +15,13 @@
 <script setup>
 import { ref } from 'vue';
 import { useSupabaseUser } from '#imports';
+import { useFaviconNotifier } from '~/composables/useFaviconNotifier';
 
 const user = useSupabaseUser();
 const showProblemForm = ref(false);
+
+// ✅ Activate the favicon notifier on every page
+useFaviconNotifier();
 </script>
 
 <style>
