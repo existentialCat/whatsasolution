@@ -14,7 +14,7 @@
         <!-- User Info -->
         <div class="d-flex justify-space-between align-center">
             <div>
-                <NuxtLink :to="`/profile/${problem.users?.slug}`" class="text-decoration-none font-weight-bold text-black">
+                <NuxtLink :to="`/profile/${problem.users?.slug}`" class="text-decoration-none font-weight-bold">
                     {{ problem.users?.username || 'Anonymous' }}
                 </NuxtLink>
                 <span class="text-grey-darken-1"> · {{ timeAgo }}</span>
@@ -33,7 +33,7 @@
         </div>
 
         <!-- Problem Title -->
-        <p class="text-body-1 mt-1 text-wrap" @click="navigateToProblem" style="cursor: pointer;">
+        <p class="text-h6 mt-1 text-wrap font-weight-bold" @click="navigateToProblem" style="cursor: pointer;">
             {{ problem.title }}
         </p>
 
