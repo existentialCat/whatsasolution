@@ -4,16 +4,17 @@
     <v-card-text class="d-flex">
       <!-- Avatar Column -->
       <div class="mr-4">
-        <v-avatar color="grey-lighten-2" size="48">
-            <span class="text-h6" v-if="problem.users?.username">{{ problem.users.username.charAt(0).toUpperCase() }}</span>
-        </v-avatar>
       </div>
-
+      
       <!-- Main Content Column -->
       <div class="flex-grow-1">
+        
         <!-- User Info -->
         <div class="d-flex justify-space-between align-center">
             <div>
+                <v-avatar color="grey-lighten-2 mr-1" size="38">
+                  <span class="text-h6" v-if="problem.users?.username">{{ problem.users.username.charAt(0).toUpperCase() }}</span>
+                </v-avatar>
                 <NuxtLink :to="`/profile/${problem.users?.slug}`" class="text-decoration-none font-weight-bold">
                     {{ problem.users?.username || 'Anonymous' }}
                 </NuxtLink>
@@ -78,7 +79,7 @@
         <!-- Action Bar -->
         <v-card-actions class="px-0 mt-2">
             <v-btn icon variant="text" size="small" @click="navigateToProblem">
-                <v-icon>mdi-comment-text-outline</v-icon>
+                <v-icon>mdi-lightbulb-outline</v-icon>
             </v-btn>
             <span class="text-body-2 text-grey-darken-1">{{ problem.solution_count }}</span>
             <v-spacer></v-spacer>
