@@ -39,7 +39,7 @@
             class="px-0"
           >
             <template v-slot:prepend>
-              <v-avatar color="grey-lighten-2" size="24">
+              <v-avatar class="mr-1" color="grey-lighten-2" size="24">
                 <span v-if="problem.users?.username">{{ problem.users.username.charAt(0).toUpperCase() }}</span>
               </v-avatar>
             </template>
