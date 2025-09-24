@@ -10,7 +10,6 @@
           <v-text-field
             v-model="problemForm.title"
             label="Title"
-            required
             counter="300"
             :rules="[
                 v => !!v || 'Title is required',
@@ -25,7 +24,7 @@
           ></v-file-input>
           <v-card-actions>
             <v-spacer></v-spacer>
-            <v-btn text @click="closeDialog">Cancel</v-btn>
+            <v-btn variant="text" @click="closeDialog">Cancel</v-btn>
             <v-btn color="primary" type="submit" :loading="isSubmitting">Submit</v-btn>
           </v-card-actions>
         </v-form>
@@ -37,6 +36,7 @@
 <script setup>
 import { ref, watch } from 'vue';
 import { useSupabaseClient, useSupabaseUser, useRouter } from '#imports';
+import { useSubmissionLimits } from '~/composables/useSubmissionLimits';
 
 const props = defineProps({
   modelValue: Boolean
@@ -47,6 +47,7 @@ const emit = defineEmits(['update:modelValue']);
 const supabase = useSupabaseClient();
 const user = useSupabaseUser();
 const router = useRouter();
+const { decrementProblemCount } = useSubmissionLimits();
 
 const submissionError = ref(null);
 const isSubmitting = ref(false);
@@ -76,7 +77,30 @@ const submitProblem = async () => {
 
     const newProblemId = crypto.randomUUID();
     
-    // ... (Your image upload logic is correct)
+    let imagePath = null;
+    const fileToUpload = Array.isArray(problemForm.value.image) ? problemForm.value.image[0] : problemForm.value.image;
+
+    if (fileToUpload) {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session) {
+        throw new Error("Could not retrieve user session to upload image.");
+      }
+      const accessToken = sessionData.session.access_token;
+
+      const formData = new FormData();
+      formData.append('file', fileToUpload);
+      formData.append('submission_id', newProblemId);
+      formData.append('filename', fileToUpload.name);
+
+      const { data: uploadData, error: uploadError } = await supabase.functions.invoke('upload-problem-image', {
+        body: formData,
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        }
+      });
+      if (uploadError) throw new Error(`Image upload failed: ${uploadError.message}`);
+      imagePath = uploadData.path;
+    }
     
     const { data: newProblem, error } = await supabase
       .from('problems')
@@ -84,23 +108,27 @@ const submitProblem = async () => {
         id: newProblemId,
         title: problemForm.value.title,
         submitted_by: user.value.id,
-        // imgs: imagePath, // Uncomment if you re-add image logic
+        imgs: imagePath,
       })
-      // ✅ FIX: Select the 'slug' from the new record instead of the 'id'
       .select('slug')
       .single();
 
     if (error) throw error;
     
+    decrementProblemCount(); // Decrement count on success
     closeDialog();
-    // ✅ FIX: Use the returned slug for the redirect
     router.push(newProblem ? `/problems/${newProblem.slug}` : '/problems');
 
   } catch (error) {
     console.error('Error submitting problem:', error);
-    submissionError.value = error.message;
+    if (error.message.includes('You have reached your daily submission limit')) {
+        submissionError.value = error.message;
+    } else {
+        submissionError.value = 'An unexpected error occurred. Please try again.';
+    }
   } finally {
     isSubmitting.value = false;
   }
 };
 </script>
+

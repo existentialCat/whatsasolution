@@ -4,6 +4,10 @@
     <v-card>
       <v-card-title class="text-h5">Submit a New Solution</v-card-title>
       <v-card-text>
+        <!-- This is the new alert to display the rate limit error -->
+        <v-alert v-if="submissionError" type="error" dense class="mb-4">
+          {{ submissionError }}
+        </v-alert>
         <v-form v-model="isFormValid" @submit.prevent="submitSolution">
           <v-text-field 
             ref="titleField"
@@ -11,7 +15,6 @@
             label="Solution Title" 
             counter="300"
             :rules="[v => !!v || 'Title is required', v => (v && v.length <= 300) || 'Title must be 300 characters or less']"
-            required
           ></v-text-field>
           <v-textarea 
             v-model="solutionForm.description" 
@@ -21,7 +24,7 @@
           ></v-textarea>
           <v-card-actions>
             <v-spacer></v-spacer>
-            <v-btn text @click="$emit('update:modelValue', false)">Cancel</v-btn>
+            <v-btn variant="text" @click="$emit('update:modelValue', false)">Cancel</v-btn>
             <v-btn color="primary" type="submit" :loading="isSubmitting" :disabled="!isFormValid || isSubmitting">Submit</v-btn>
           </v-card-actions>
         </v-form>
@@ -33,6 +36,7 @@
 <script setup>
 import { ref, watch, nextTick } from 'vue';
 import { useSupabaseClient, useSupabaseUser } from '#imports';
+import { useSubmissionLimits } from '~/composables/useSubmissionLimits';
 
 const props = defineProps({
   modelValue: Boolean,
@@ -43,23 +47,28 @@ const emit = defineEmits(['update:modelValue', 'solution-submitted']);
 
 const supabase = useSupabaseClient();
 const user = useSupabaseUser();
+const { decrementSolutionCount } = useSubmissionLimits();
 
 const isSubmitting = ref(false);
 const isFormValid = ref(false);
 const solutionForm = ref({ title: '', description: '' });
 const titleField = ref(null);
+const submissionError = ref(null);
 
 watch(() => props.modelValue, (isShown) => {
   if (isShown) {
+    submissionError.value = null; // Reset error on open
+    solutionForm.value = { title: '', description: '' };
     nextTick(() => titleField.value?.focus());
   }
 });
 
 const submitSolution = async () => {
   if (!isFormValid.value || !user.value) return;
+  submissionError.value = null;
   isSubmitting.value = true;
   try {
-    const { data: newSolution } = await supabase
+    const { data: newSolution, error } = await supabase
       .from('solutions')
       .insert({
         title: solutionForm.value.title,
@@ -67,16 +76,26 @@ const submitSolution = async () => {
         submitted_by: user.value.id,
         parent_problem: props.problemId,
       })
-      .select('*, users (username)')
+      .select('*, users (username, slug)')
       .single();
     
+    if (error) throw error;
+    
+    decrementSolutionCount(); // Decrement count on success
     emit('solution-submitted', newSolution);
     emit('update:modelValue', false);
-    solutionForm.value = { title: '', description: '' };
+    
   } catch (e) {
     console.error('Error submitting solution:', e);
+    // This is the key change: We check for the specific rate limit error message.
+    if (e.message.includes('You have reached your daily submission limit')) {
+        submissionError.value = e.message;
+    } else {
+        submissionError.value = 'An unexpected error occurred. Please try again.';
+    }
   } finally {
     isSubmitting.value = false;
   }
 };
 </script>
+

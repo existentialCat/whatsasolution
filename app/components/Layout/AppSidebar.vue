@@ -22,7 +22,10 @@
     </v-list>
 
     <v-spacer></v-spacer>
-
+    <div v-if="user && !isExempt && !mobile" class="pa-2">
+        <v-list-item :subtitle="`${problemsRemaining} problems remaining`" density="compact" class="text-caption"></v-list-item>
+        <v-list-item :subtitle="`${solutionsRemaining} solutions remaining`" density="compact" class="text-caption"></v-list-item>
+    </div>
     <div class="pa-2 text-center">
       <v-btn v-if="user && !mobile" block color="primary" @click="$emit('open-submit-dialog')" rounded="xl" size="large">
         Submit Problem
@@ -42,11 +45,16 @@
 import { useDisplay } from 'vuetify';
 import { useSupabaseUser } from '#imports';
 import { useUserProfile } from '~/composables/useUserProfile';
+import { useSubmissionLimits } from '~/composables/useSubmissionLimits';
+
 
 const user = useSupabaseUser();
 const { mobile } = useDisplay();
 const { profile } = useUserProfile(); // Fetch profile to get the slug
+const { problemsRemaining, solutionsRemaining, isExempt } = useSubmissionLimits();
+
 defineEmits(['open-submit-dialog']);
+
 </script>
 
 <style scoped>
