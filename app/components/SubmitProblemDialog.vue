@@ -7,6 +7,19 @@
           <v-alert v-if="submissionError" type="error" dense class="mb-4">
             {{ submissionError }}
           </v-alert>
+
+          <!-- This is the new section for displaying submission limits -->
+          <v-alert
+            v-if="user && !isExempt"
+            border="start"
+            variant="tonal"
+            density="compact"
+            class="mb-4 text-caption"
+          >
+            You have <strong>{{ problemsRemaining }} of 5</strong> problems remaining today.
+            <div v-if="timeUntilReset">{{ timeUntilReset }}</div>
+          </v-alert>
+
           <v-text-field
             v-model="problemForm.title"
             label="Title"
@@ -25,7 +38,7 @@
           <v-card-actions>
             <v-spacer></v-spacer>
             <v-btn variant="text" @click="closeDialog">Cancel</v-btn>
-            <v-btn color="primary" type="submit" :loading="isSubmitting">Submit</v-btn>
+            <v-btn color="primary" type="submit" :loading="isSubmitting" :disabled="problemsRemaining <= 0 && !isExempt">Submit</v-btn>
           </v-card-actions>
         </v-form>
       </v-card-text>
@@ -47,7 +60,7 @@ const emit = defineEmits(['update:modelValue']);
 const supabase = useSupabaseClient();
 const user = useSupabaseUser();
 const router = useRouter();
-const { decrementProblemCount } = useSubmissionLimits();
+const { problemsRemaining, timeUntilReset, isExempt, decrementProblemCount } = useSubmissionLimits();
 
 const submissionError = ref(null);
 const isSubmitting = ref(false);
@@ -76,7 +89,6 @@ const submitProblem = async () => {
     if (!user.value) throw new Error('You must be logged in.');
 
     const newProblemId = crypto.randomUUID();
-    
     let imagePath = null;
     const fileToUpload = Array.isArray(problemForm.value.image) ? problemForm.value.image[0] : problemForm.value.image;
 
@@ -86,7 +98,6 @@ const submitProblem = async () => {
         throw new Error("Could not retrieve user session to upload image.");
       }
       const accessToken = sessionData.session.access_token;
-
       const formData = new FormData();
       formData.append('file', fileToUpload);
       formData.append('submission_id', newProblemId);
@@ -94,9 +105,7 @@ const submitProblem = async () => {
 
       const { data: uploadData, error: uploadError } = await supabase.functions.invoke('upload-problem-image', {
         body: formData,
-        headers: {
-          Authorization: `Bearer ${accessToken}`
-        }
+        headers: { Authorization: `Bearer ${accessToken}` }
       });
       if (uploadError) throw new Error(`Image upload failed: ${uploadError.message}`);
       imagePath = uploadData.path;
@@ -115,7 +124,7 @@ const submitProblem = async () => {
 
     if (error) throw error;
     
-    decrementProblemCount(); // Decrement count on success
+    decrementProblemCount();
     closeDialog();
     router.push(newProblem ? `/problems/${newProblem.slug}` : '/problems');
 

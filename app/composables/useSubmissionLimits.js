@@ -16,26 +16,35 @@ export function useSubmissionLimits() {
     problems: 0,
     solutions: 0,
     role: 'user',
+    earliestSubmission: null,
   }));
 
   const user = useSupabaseUser();
   const supabase = useSupabaseClient();
+  const now = ref(new Date());
+  let timer = null;
 
   // We ensure the data fetching and listeners are set up only once.
   if (!isInitialized) {
     isInitialized = true;
+
+    if (process.client) {
+      timer = setInterval(() => {
+          now.value = new Date();
+      }, 60000);
+    }
     
-    const { data } = useAsyncData(
+    const { data, refresh } = useAsyncData(
       'user-submission-counts',
       async () => {
-        if (!user.value) return { problems_submitted: 0, solutions_submitted: 0, user_role: 'user' };
+        if (!user.value) return { problems_submitted: 0, solutions_submitted: 0, user_role: 'user', earliest_submission_at: null };
         try {
           const { data, error } = await supabase.rpc('get_user_submission_counts');
           if (error) throw error;
           return data[0];
         } catch (e) {
           console.error("Error fetching submission counts:", e);
-          return { problems_submitted: 0, solutions_submitted: 0, user_role: 'user' };
+          return { problems_submitted: 0, solutions_submitted: 0, user_role: 'user', earliest_submission_at: null };
         }
       },
       { watch: [user] }
@@ -46,11 +55,29 @@ export function useSubmissionLimits() {
         submissionCounts.value.problems = newData.problems_submitted;
         submissionCounts.value.solutions = newData.solutions_submitted;
         submissionCounts.value.role = newData.user_role;
+        submissionCounts.value.earliestSubmission = newData.earliest_submission_at;
       }
     }, { immediate: true });
-
-    // The problematic line that stored a function in state has been removed.
   }
+
+  const timeUntilReset = computed(() => {
+      if (!submissionCounts.value.earliestSubmission) return null;
+      
+      const resetTime = new Date(new Date(submissionCounts.value.earliestSubmission).getTime() + 24 * 60 * 60 * 1000);
+      const diff = resetTime - now.value;
+      
+      if (diff <= 0) {
+        submissionCounts.value.problems = 0;
+        submissionCounts.value.solutions = 0;
+        submissionCounts.value.earliestSubmission = null;
+        return "Limits have reset";
+      }
+
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+      return `Resets in ${hours}h ${minutes}m`;
+  });
 
   const problemsRemaining = computed(() => {
     if (submissionCounts.value.role === 'admin' || submissionCounts.value.role === 'moderator') return Infinity;
@@ -62,22 +89,32 @@ export function useSubmissionLimits() {
     return Math.max(0, SOLUTION_LIMIT - submissionCounts.value.solutions);
   });
 
-  // Local decrement functions for instant UI feedback
   const decrementProblemCount = () => {
     if (submissionCounts.value.role === 'user') {
+      if (!submissionCounts.value.earliestSubmission) {
+        submissionCounts.value.earliestSubmission = new Date().toISOString();
+      }
       submissionCounts.value.problems++;
     }
   };
 
   const decrementSolutionCount = () => {
     if (submissionCounts.value.role === 'user') {
+      if (!submissionCounts.value.earliestSubmission) {
+        submissionCounts.value.earliestSubmission = new Date().toISOString();
+      }
       submissionCounts.value.solutions++;
     }
   };
+  
+  onUnmounted(() => {
+      if (timer) clearInterval(timer);
+  });
 
   return { 
     problemsRemaining, 
     solutionsRemaining, 
+    timeUntilReset,
     isExempt: computed(() => submissionCounts.value.role === 'admin' || submissionCounts.value.role === 'moderator'),
     decrementProblemCount,
     decrementSolutionCount

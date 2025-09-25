@@ -22,10 +22,12 @@
     </v-list>
 
     <v-spacer></v-spacer>
+
+    <!-- This is the new section for displaying submission limits in the expanded view -->
     <div v-if="user && !isExempt && !mobile" class="pa-2">
-        <v-list-item :subtitle="`${problemsRemaining} problems remaining`" density="compact" class="text-caption"></v-list-item>
-        <v-list-item :subtitle="`${solutionsRemaining} solutions remaining`" density="compact" class="text-caption"></v-list-item>
+        <LayoutSubmissionCounter />
     </div>
+
     <div class="pa-2 text-center">
       <v-btn v-if="user && !mobile" block color="primary" @click="$emit('open-submit-dialog')" rounded="xl" size="large">
         Submit Problem

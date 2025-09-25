@@ -1,13 +1,24 @@
-<!-- components/SubmitSolutionDialog.vue -->
 <template>
   <v-dialog :model-value="modelValue" @update:model-value="$emit('update:modelValue', $event)" max-width="600" persistent>
     <v-card>
       <v-card-title class="text-h5">Submit a New Solution</v-card-title>
       <v-card-text>
-        <!-- This is the new alert to display the rate limit error -->
         <v-alert v-if="submissionError" type="error" dense class="mb-4">
-          {{ submissionError }}
+            {{ submissionError }}
         </v-alert>
+
+        <!-- This is the new section for displaying submission limits -->
+        <v-alert
+          v-if="user && !isExempt"
+          border="start"
+          variant="tonal"
+          density="compact"
+          class="mb-4 text-caption"
+        >
+          You have <strong>{{ solutionsRemaining }} of 10</strong> solutions remaining today.
+          <div v-if="timeUntilReset">{{ timeUntilReset }}</div>
+        </v-alert>
+
         <v-form v-model="isFormValid" @submit.prevent="submitSolution">
           <v-text-field 
             ref="titleField"
@@ -25,7 +36,7 @@
           <v-card-actions>
             <v-spacer></v-spacer>
             <v-btn variant="text" @click="$emit('update:modelValue', false)">Cancel</v-btn>
-            <v-btn color="primary" type="submit" :loading="isSubmitting" :disabled="!isFormValid || isSubmitting">Submit</v-btn>
+            <v-btn color="primary" type="submit" :loading="isSubmitting" :disabled="!isFormValid || (solutionsRemaining <= 0 && !isExempt)">Submit</v-btn>
           </v-card-actions>
         </v-form>
       </v-card-text>
@@ -47,7 +58,7 @@ const emit = defineEmits(['update:modelValue', 'solution-submitted']);
 
 const supabase = useSupabaseClient();
 const user = useSupabaseUser();
-const { decrementSolutionCount } = useSubmissionLimits();
+const { solutionsRemaining, timeUntilReset, isExempt, decrementSolutionCount } = useSubmissionLimits();
 
 const isSubmitting = ref(false);
 const isFormValid = ref(false);
@@ -57,7 +68,7 @@ const submissionError = ref(null);
 
 watch(() => props.modelValue, (isShown) => {
   if (isShown) {
-    submissionError.value = null; // Reset error on open
+    submissionError.value = null;
     solutionForm.value = { title: '', description: '' };
     nextTick(() => titleField.value?.focus());
   }
@@ -81,13 +92,12 @@ const submitSolution = async () => {
     
     if (error) throw error;
     
-    decrementSolutionCount(); // Decrement count on success
+    decrementSolutionCount();
     emit('solution-submitted', newSolution);
     emit('update:modelValue', false);
     
   } catch (e) {
     console.error('Error submitting solution:', e);
-    // This is the key change: We check for the specific rate limit error message.
     if (e.message.includes('You have reached your daily submission limit')) {
         submissionError.value = e.message;
     } else {

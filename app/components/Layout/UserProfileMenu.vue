@@ -23,6 +23,11 @@
         </div>
       </template>
       <v-list>
+        <!-- This is the new section for submission limits in the menu -->
+        <div v-if="!isExempt" class="px-2">
+            <LayoutSubmissionCounter mobile />
+            <v-divider class="my-2"></v-divider>
+        </div>
         <v-list-item @click.stop>
           <v-switch
             :model-value="currentThemeName === 'dark'"
@@ -51,10 +56,13 @@ import { useSupabaseUser } from '#imports';
 import { useThemeManager } from '~/composables/useTheme';
 import { useUserProfile } from '~/composables/useUserProfile';
 import { useAuthHandler } from '~/composables/useAuthHandler';
+import { useSubmissionLimits } from '~/composables/useSubmissionLimits';
+import LayoutSubmissionCounter from '~/components/Layout/SubmissionCounter.vue'; // Import the new component
 
 const user = useSupabaseUser();
 const { mobile } = useDisplay();
 const { toggleTheme, currentThemeName } = useThemeManager();
 const { profile } = useUserProfile();
 const { handleLogout } = useAuthHandler();
+const { isExempt } = useSubmissionLimits();
 </script>
