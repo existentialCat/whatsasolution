@@ -10,6 +10,10 @@
           <div class="d-flex align-center">
             <div v-if="solution.ai_assessment_status === 'pending'" class="d-flex align-center text-caption mr-2">
               <v-progress-circular indeterminate size="16" width="2" class="mr-2"></v-progress-circular>
+              Submitting...
+            </div>
+            <div v-if="solution.ai_assessment_status === 'processing'" class="d-flex align-center text-caption mr-2">
+              <v-progress-circular indeterminate size="16" width="2" class="mr-2"></v-progress-circular>
               Analysis in progress...
             </div>
             <div v-else-if="solution.ai_assessment_status === 'completed' && !isExpanded" class="text-caption font-weight-medium mr-2">
