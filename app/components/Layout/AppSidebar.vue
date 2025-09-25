@@ -9,8 +9,9 @@
 
     <v-list density="compact" nav>
       <v-list-item prepend-icon="mdi-home-variant-outline" title="Problems" to="/problems" rounded="xl"></v-list-item>
+      <!-- This is the new Search link -->
+      <v-list-item prepend-icon="mdi-magnify" title="Search" to="/search" rounded="xl"></v-list-item>
       <LayoutNotificationMenu v-if="user" />
-      <!-- This is the key fix: The button is now always visible for logged-in users but disabled while the profile loads. -->
       <v-list-item
         v-if="user"
         prepend-icon="mdi-account-outline"
@@ -23,7 +24,6 @@
 
     <v-spacer></v-spacer>
 
-    <!-- This is the new section for displaying submission limits in the expanded view -->
     <div v-if="user && !isExempt && !mobile" class="pa-2">
         <LayoutSubmissionCounter />
     </div>
@@ -32,9 +32,14 @@
       <v-btn v-if="user && !mobile" block color="primary" @click="$emit('open-submit-dialog')" rounded="xl" size="large">
         Submit Problem
       </v-btn>
-      <v-btn v-if="user && mobile" icon color="primary" @click="$emit('open-submit-dialog')" size="small">
-        <v-icon>mdi-plus</v-icon>
-      </v-btn>
+      <v-tooltip v-if="user && mobile" location="end">
+          <template v-slot:activator="{ props }">
+              <v-btn v-bind="props" icon color="primary" @click="$emit('open-submit-dialog')" size="small">
+                <v-icon>mdi-plus</v-icon>
+              </v-btn>
+          </template>
+          <LayoutSubmissionCounter mobile />
+      </v-tooltip>
     </div>
 
     <template v-slot:append>
@@ -53,12 +58,18 @@ import { useSubmissionLimits } from '~/composables/useSubmissionLimits';
 const user = useSupabaseUser();
 const { mobile } = useDisplay();
 const { profile } = useUserProfile(); // Fetch profile to get the slug
-const { problemsRemaining, solutionsRemaining, isExempt } = useSubmissionLimits();
+const { isExempt } = useSubmissionLimits();
 
 defineEmits(['open-submit-dialog']);
 
 </script>
 
 <style scoped>
+.app-sidebar {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  height: 100vh !important;
+}
 </style>
 
