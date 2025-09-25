@@ -1,8 +1,7 @@
 /* This is the global stylesheet for your application. */
 
-/* Fixed overflow */
-body {
-  overflow-y: hidden;
+html {
+  overflow-y: auto;
 }
 
 /* Apply the custom font families to the appropriate elements. */
