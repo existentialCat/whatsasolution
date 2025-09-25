@@ -6,12 +6,9 @@ import { useSupabaseClient, useSupabaseUser, useAsyncData, useState } from '#imp
 const PROBLEM_LIMIT = 5;
 const SOLUTION_LIMIT = 10;
 
-// This flag is defined at the top level to ensure it's a true singleton.
-let isInitialized = false;
-
 export function useSubmissionLimits() {
-  // This is the key fix: We now call useState inside the composable function.
-  // Because useState creates a singleton by key, the state will still be shared.
+  // We call useState inside the composable function to ensure it has the correct Nuxt instance context.
+  // Because useState creates a singleton by key, the state will still be shared across all components.
   const submissionCounts = useState('submission-counts', () => ({
     problems: 0,
     solutions: 0,
@@ -24,41 +21,42 @@ export function useSubmissionLimits() {
   const now = ref(new Date());
   let timer = null;
 
-  // We ensure the data fetching and listeners are set up only once.
-  if (!isInitialized) {
-    isInitialized = true;
-
-    if (process.client) {
-      timer = setInterval(() => {
-          now.value = new Date();
-      }, 60000);
-    }
-    
-    const { data, refresh } = useAsyncData(
-      'user-submission-counts',
-      async () => {
-        if (!user.value) return { problems_submitted: 0, solutions_submitted: 0, user_role: 'user', earliest_submission_at: null };
-        try {
-          const { data, error } = await supabase.rpc('get_user_submission_counts');
-          if (error) throw error;
-          return data[0];
-        } catch (e) {
-          console.error("Error fetching submission counts:", e);
-          return { problems_submitted: 0, solutions_submitted: 0, user_role: 'user', earliest_submission_at: null };
-        }
-      },
-      { watch: [user] }
-    );
-
-    watch(data, (newData) => {
-      if (newData) {
-        submissionCounts.value.problems = newData.problems_submitted;
-        submissionCounts.value.solutions = newData.solutions_submitted;
-        submissionCounts.value.role = newData.user_role;
-        submissionCounts.value.earliestSubmission = newData.earliest_submission_at;
-      }
-    }, { immediate: true });
+  if (process.client && !timer) {
+    timer = setInterval(() => {
+        now.value = new Date();
+    }, 60000);
   }
+  
+  // This is the key fix: The isInitialized flag has been removed.
+  // `useAsyncData` with the `watch: [user]` option will now correctly handle
+  // re-fetching data whenever the user logs in or out.
+  const { data, refresh } = useAsyncData(
+    'user-submission-counts',
+    async () => {
+      if (!user.value) return { problems_submitted: 0, solutions_submitted: 0, user_role: 'user', earliest_submission_at: null };
+      try {
+        const { data, error } = await supabase.rpc('get_user_submission_counts');
+        if (error) throw error;
+        return data[0];
+      } catch (e) {
+        console.error("Error fetching submission counts:", e);
+        return { problems_submitted: 0, solutions_submitted: 0, user_role: 'user', earliest_submission_at: null };
+      }
+    },
+    { watch: [user] }
+  );
+
+  watch(data, (newData) => {
+    if (newData) {
+      submissionCounts.value.problems = newData.problems_submitted;
+      submissionCounts.value.solutions = newData.solutions_submitted;
+      submissionCounts.value.role = newData.user_role;
+      submissionCounts.value.earliestSubmission = newData.earliest_submission_at;
+    } else {
+      // If data is null (e.g., on logout), reset the counts.
+      submissionCounts.value = { problems: 0, solutions: 0, role: 'user', earliestSubmission: null };
+    }
+  }, { immediate: true });
 
   const timeUntilReset = computed(() => {
       if (!submissionCounts.value.earliestSubmission) return null;
@@ -67,9 +65,7 @@ export function useSubmissionLimits() {
       const diff = resetTime - now.value;
       
       if (diff <= 0) {
-        submissionCounts.value.problems = 0;
-        submissionCounts.value.solutions = 0;
-        submissionCounts.value.earliestSubmission = null;
+        refresh(); // Refresh data now that limits have reset
         return "Limits have reset";
       }
 
