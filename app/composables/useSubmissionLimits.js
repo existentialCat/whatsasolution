@@ -3,8 +3,8 @@ import { computed, watch } from 'vue';
 import { useSupabaseClient, useSupabaseUser, useAsyncData, useState } from '#imports';
 
 // Define the daily limits
-const PROBLEM_LIMIT = 5;
-const SOLUTION_LIMIT = 10;
+const PROBLEM_LIMIT = 2;
+const SOLUTION_LIMIT = 5;
 
 export function useSubmissionLimits() {
   // We call useState inside the composable function to ensure it has the correct Nuxt instance context.

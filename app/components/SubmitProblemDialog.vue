@@ -16,7 +16,7 @@
             density="compact"
             class="mb-4 text-caption"
           >
-            You have <strong>{{ problemsRemaining }} of 5</strong> problems remaining today.
+            You have <strong>{{ problemsRemaining }} of 2</strong> problems remaining today.
             <div v-if="timeUntilReset">{{ timeUntilReset }}</div>
           </v-alert>
 

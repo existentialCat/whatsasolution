@@ -15,7 +15,7 @@
           density="compact"
           class="mb-4 text-caption"
         >
-          You have <strong>{{ solutionsRemaining }} of 10</strong> solutions remaining today.
+          You have <strong>{{ solutionsRemaining }} of 5</strong> solutions remaining today.
           <div v-if="timeUntilReset">{{ timeUntilReset }}</div>
         </v-alert>
 
