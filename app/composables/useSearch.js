@@ -2,12 +2,7 @@
 import { watch } from 'vue';
 import { useSupabaseClient, useState } from '#imports';
 
-// This flag ensures the watcher is only set up once.
-let isWatcherInitialized = false;
-
 export function useSearch() {
-  // We call useState inside the composable to get the correct Nuxt context.
-  // Because it uses a key, the state will be a singleton.
   const searchQuery = useState('search-query', () => '');
   const searchResults = useState('search-results', () => []);
   const isLoading = useState('search-loading', () => false);
@@ -16,8 +11,9 @@ export function useSearch() {
   let debounceTimer = null;
 
   const performSearch = async () => {
-    if (!searchQuery.value.trim()) {
+    if (!searchQuery.value || !searchQuery.value.trim()) {
       searchResults.value = [];
+      isLoading.value = false;
       return;
     }
     
@@ -36,24 +32,19 @@ export function useSearch() {
     }
   };
 
-  // This is the key fix: We ensure the watcher is set up only once
-  // to avoid race conditions and duplicate listeners.
-  if (!isWatcherInitialized) {
-    isWatcherInitialized = true;
-    
-    watch(searchQuery, (newValue) => {
-      clearTimeout(debounceTimer);
-      if (newValue && newValue.trim()) {
-        isLoading.value = true; // Show loading immediately
-        debounceTimer = setTimeout(() => {
-          performSearch();
-        }, 300); // 300ms debounce
-      } else {
-        isLoading.value = false;
-        searchResults.value = [];
-      }
-    });
-  }
+  // The watcher for live-search functionality.
+  watch(searchQuery, (newValue) => {
+    clearTimeout(debounceTimer);
+    if (newValue && newValue.trim()) {
+      isLoading.value = true;
+      debounceTimer = setTimeout(() => {
+        performSearch();
+      }, 300);
+    } else {
+      isLoading.value = false;
+      searchResults.value = [];
+    }
+  });
 
   return {
     searchQuery,
