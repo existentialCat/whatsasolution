@@ -1,14 +1,13 @@
 export default defineNuxtConfig({
   compatibilityDate: '2025-09-13',
   app: {
-    head: {
-      // Add this link tag for your favicon
-      link: [
-        { id: 'favicon-link-original', rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }
-      ]
-    }
-  },
-  ssr: true,
+    head: {
+      link: [
+        { id: 'favicon-link-original', rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }
+      ]
+    }
+  },
+  ssr: true,
   css: [
     'vuetify/styles',
     '@mdi/font/css/materialdesignicons.min.css',
@@ -24,7 +23,8 @@ export default defineNuxtConfig({
     redirectOptions: {
       login: '/login',
       callback: '/confirm',
-      exclude: ['/', '/problems', '/problems/**', '/solutions/**'],
+      // This is the key fix: Add '/reset-password' to this array.
+      exclude: ['/', '/problems', '/problems/**', '/solutions/**', '/forgot-password', '/reset-password'],
     },
   },
   googleFonts: {
@@ -50,15 +50,15 @@ export default defineNuxtConfig({
               surface: '#FFFFFF',
             }
           },
-          dark: {
-            dark: true,
-            colors: {
-              primary: '#94A3B8',    // Lighter Slate
-              secondary: '#F59E0B',  // Brighter Amber
-              background: '#000000ff', // Dark Blue/Slate
-              surface: '#232931ff',    // Lighter Dark Blue/Slate
-            }
-          }
+          dark: {
+            dark: true,
+            colors: {
+              primary: '#94A3B8',
+              secondary: '#F59E0B',
+              background: '#000000ff',
+              surface: '#232931ff',
+            }
+          }
         }
       }
     }

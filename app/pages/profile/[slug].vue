@@ -18,7 +18,20 @@
               <span class="text-h2 white--text">{{ profile.username.charAt(0).toUpperCase() }}</span>
           </v-avatar>
         </v-avatar>
-        <v-btn v-if="isOwnProfile" color="primary" variant="outlined">Edit Profile</v-btn>
+        
+        <!-- This is the new Settings Menu -->
+        <v-menu v-if="isOwnProfile" location="bottom end">
+            <template v-slot:activator="{ props }">
+                <v-btn v-bind="props" icon="mdi-cog" color="primary" variant="tonal"></v-btn>
+            </template>
+            <v-list>
+                <v-list-item @click="showUpdatePassword = true">
+                    <template v-slot:prepend><v-icon>mdi-lock-reset</v-icon></template>
+                    <v-list-item-title>Update Password</v-list-item-title>
+                </v-list-item>
+            </v-list>
+        </v-menu>
+
       </div>
       <v-card-text class="pt-4">
         <h1 class="text-h5 font-weight-bold">{{ profile.username }}</h1>
@@ -107,6 +120,37 @@
         <h2 class="text-h6">User profile not found.</h2>
       </div>
   </v-container>
+
+  <!-- This is the updated dialog for updating the password -->
+    <v-dialog v-model="showUpdatePassword" max-width="500" persistent>
+        <v-card>
+            <v-card-title class="text-h5">Update Password</v-card-title>
+            <v-card-text>
+                <v-alert v-if="updateError" type="error" dense class="mb-4">{{ updateError }}</v-alert>
+                <v-alert v-if="updateMessage" type="success" dense class="mb-4">{{ updateMessage }}</v-alert>
+                <v-text-field
+                    v-model="newPassword"
+                    label="New Password"
+                    type="password"
+                    required
+                    variant="outlined"
+                    class="mb-2"
+                ></v-text-field>
+                <v-text-field
+                    v-model="confirmPassword"
+                    label="Confirm New Password"
+                    type="password"
+                    required
+                    variant="outlined"
+                ></v-text-field>
+            </v-card-text>
+            <v-card-actions>
+                <v-spacer></v-spacer>
+                <v-btn text @click="closeUpdatePasswordDialog">Cancel</v-btn>
+                <v-btn color="primary" @click="updatePassword" :loading="isUpdatingPassword">Save</v-btn>
+            </v-card-actions>
+        </v-card>
+    </v-dialog>
 </template>
 
 <script setup>
@@ -127,6 +171,14 @@ const tab = ref('problems');
 
 const profileSlug = computed(() => route.params.slug);
 const isOwnProfile = computed(() => user.value && profile.value && user.value.id === profile.value.id);
+
+// New refs for the update password dialog
+const showUpdatePassword = ref(false);
+const newPassword = ref('');
+const confirmPassword = ref('');
+const isUpdatingPassword = ref(false);
+const updateError = ref('');
+const updateMessage = ref('');
 
 const groupedSolutions = computed(() => {
     if (!solutions.value || solutions.value.length === 0) return [];
@@ -153,7 +205,6 @@ const fetchData = async (slug) => {
         profile.value = profileData;
         const profileId = profileData.id;
 
-        // This is the key fix: The query for comments now fetches the solution's slug.
         const [problemsRes, solutionsRes, commentsRes] = await Promise.all([
             supabase.from('problems').select('id, title, slug, created_at').eq('submitted_by', profileId).order('created_at', { ascending: false }),
             supabase.from('solutions').select(`id, title, slug, created_at, parent_problem, problems!inner(id, title, slug)`).eq('submitted_by', profileId).order('created_at', { ascending: false }),
@@ -165,6 +216,34 @@ const fetchData = async (slug) => {
         if (commentsRes.data) comments.value = commentsRes.data;
     }
     isLoading.value = false;
+};
+
+const closeUpdatePasswordDialog = () => {
+    showUpdatePassword.value = false;
+    newPassword.value = '';
+    confirmPassword.value = '';
+    updateError.value = '';
+    updateMessage.value = '';
+};
+
+const updatePassword = async () => {
+    if (newPassword.value !== confirmPassword.value) {
+        updateError.value = 'Passwords do not match.';
+        return;
+    }
+    isUpdatingPassword.value = true;
+    updateError.value = '';
+    updateMessage.value = '';
+    try {
+        const { error } = await supabase.auth.updateUser({ password: newPassword.value });
+        if (error) throw error;
+        updateMessage.value = 'Password updated successfully!';
+        setTimeout(closeUpdatePasswordDialog, 2000);
+    } catch (e) {
+        updateError.value = e.message;
+    } finally {
+        isUpdatingPassword.value = false;
+    }
 };
 
 watch(profileSlug, (newSlug) => {

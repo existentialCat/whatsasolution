@@ -54,10 +54,12 @@
               </v-btn>
             </v-form>
           </v-card-text>
-          <v-card-actions class="justify-center">
+          <!-- This is the updated actions section -->
+          <v-card-actions class="d-flex justify-space-between align-center">
              <a href="#" @click.prevent="toggleForm" class="text-decoration-none">
-                {{ isRegistering ? 'Already have an account? Login' : "Don't have an account? Sign Up" }}
+               {{ isRegistering ? 'Already have an account? Login' : "Don't have an account? Sign Up" }}
              </a>
+             <NuxtLink v-if="!isRegistering" to="/forgot-password" class="text-caption text-decoration-none">Forgot Password?</NuxtLink>
           </v-card-actions>
         </v-card>
       </v-col>
@@ -67,6 +69,8 @@
 
 <script setup>
 import { ref } from 'vue';
+import { useSupabaseClient, useRouter } from '#imports';
+
 const supabase = useSupabaseClient();
 const router = useRouter();
 
