@@ -43,6 +43,17 @@
                 :rules="[v => !!v || 'Password is required']"
               ></v-text-field>
 
+              <!-- This is the new "Confirm Password" field -->
+              <v-text-field
+                v-if="isRegistering"
+                v-model="confirmPassword"
+                label="Confirm Password"
+                type="password"
+                required
+                prepend-inner-icon="mdi-lock-check"
+                :rules="[v => !!v || 'Password confirmation is required', v => v === password || 'Passwords do not match']"
+              ></v-text-field>
+
               <v-btn
                 :loading="loading"
                 type="submit"
@@ -53,6 +64,19 @@
                 {{ isRegistering ? 'Sign Up' : 'Login' }}
               </v-btn>
             </v-form>
+
+            <v-divider class="my-4">OR</v-divider>
+
+            <v-btn
+                block
+                variant="outlined"
+                @click="handleOAuthLogin('google')"
+                :loading="loading"
+            >
+                <v-icon start>mdi-google</v-icon>
+                Sign In with Google
+            </v-btn>
+
           </v-card-text>
           <!-- This is the updated actions section -->
           <v-card-actions class="d-flex justify-space-between align-center">
@@ -75,13 +99,31 @@ const supabase = useSupabaseClient();
 const router = useRouter();
 
 const isRegistering = ref(false); // Controls which form is shown, defaults to login
-
 const username = ref('');
 const email = ref('');
 const password = ref('');
 const loading = ref(false);
 const errorMessage = ref(null);
 const successMessage = ref(null);
+
+// This is the new function to handle the Google OAuth sign-in flow
+const handleOAuthLogin = async (provider) => {
+    loading.value = true;
+    errorMessage.value = null;
+    try {
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider,
+            options: {
+                redirectTo: `${window.location.origin}/confirm`,
+            },
+        });
+        if (error) throw error;
+        // The user will be redirected to Google by Supabase, so no client-side redirect is needed here.
+    } catch (error) {
+        errorMessage.value = error.message;
+        loading.value = false;
+    }
+};
 
 // Function to toggle between login and register forms
 const toggleForm = () => {
