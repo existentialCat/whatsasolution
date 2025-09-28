@@ -13,7 +13,7 @@ export function useUserProfile() {
         // This is the key fix: We now select the 'slug' column.
         const { data, error } = await supabase
           .from('users')
-          .select('username, role, slug') // Added slug
+          .select('username, role, slug, avatar_url') // Added slug
           .eq('id', user.value.id)
           .single();
         if (error) throw error;

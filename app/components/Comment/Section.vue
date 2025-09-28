@@ -3,9 +3,12 @@
     <h2 class="text-h5 mb-4">Comments</h2>
     <v-card v-if="user && profile" class="mb-6" flat>
       <v-card-text class="d-flex align-start">
-        <v-avatar color="primary" class="mr-4 mt-2">
-          <span>{{ profile.username.charAt(0).toUpperCase() }}</span>
-        </v-avatar>
+          <v-avatar v-if="!profile.avatar_url" color="primary" class="mr-4 mt-2">
+            <span class="text-h6 text-white" v-if="profile.username">{{ profile.username.charAt(0).toUpperCase() }}</span>
+          </v-avatar>
+          <v-avatar size="40" class="mr-4 mt-2">
+            <v-img :src="profile.avatar_url" :alt="profile.username"></v-img>
+          </v-avatar>
 
         <div class="flex-grow-1">
           <v-textarea

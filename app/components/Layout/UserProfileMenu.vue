@@ -4,8 +4,11 @@
     <v-menu v-if="user && profile" location="top end">
       <template v-slot:activator="{ props }">
         <v-btn v-if="!mobile" v-bind="props" block variant="text" class="justify-start text-none pa-2" height="auto">
-          <v-avatar color="primary" size="40" class="mr-3">
+          <v-avatar v-if="!profile.avatar_url" color="primary" size="40" class="mr-3">
             <span class="text-h6 text-white" v-if="profile.username">{{ profile.username.charAt(0).toUpperCase() }}</span>
+          </v-avatar>
+          <v-avatar v-else size="40" class="mr-3">
+            <v-img :src="profile.avatar_url" :alt="profile.username"></v-img>
           </v-avatar>
           <div class="text-left">
             <div class="font-weight-bold">{{ profile.username }}</div>
@@ -16,9 +19,12 @@
         </v-btn>
         <div v-else class="d-flex justify-center">
           <v-btn v-bind="props" icon size="40" variant="text">
-            <v-avatar color="primary" size="40">
-              <span class="text-h6 text-white" v-if="profile.username">{{ profile.username.charAt(0).toUpperCase() }}</span>
-            </v-avatar>
+            <v-avatar v-if="!profile.avatar_url" color="primary" size="40" class="mr-3">
+            <span class="text-h6 text-white" v-if="profile.username">{{ profile.username.charAt(0).toUpperCase() }}</span>
+          </v-avatar>
+          <v-avatar v-else size="40">
+            <v-img :src="profile.avatar_url" :alt="profile.username"></v-img>
+          </v-avatar>
           </v-btn>
         </div>
       </template>

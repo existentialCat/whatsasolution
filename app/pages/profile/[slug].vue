@@ -6,19 +6,51 @@
   <v-container v-else-if="profile">
     <!-- Profile Header -->
     <v-card flat class="mb-6">
-      <v-img
-        class="bg-grey-lighten-2"
-        height="200"
-        cover
-        src="https://picsum.photos/1200/400?random"
-      ></v-img>
+      <div class="position-relative">
+        <v-img
+          class="bg-grey-lighten-2"
+          height="200"
+          cover
+          :src="profile.cover_url || 'https://picsum.photos/1200/400?random'"
+        >
+          <template v-slot:placeholder>
+            <div class="d-flex align-center justify-center fill-height">
+              <v-progress-circular color="grey-lighten-4" indeterminate></v-progress-circular>
+            </div>
+          </template>
+        </v-img>
+        <v-btn
+          v-if="isOwnProfile"
+          icon="mdi-camera"
+          class="position-absolute"
+          style="top: 16px; right: 16px; z-index: 1;"
+          @click="triggerFileUpload('cover')"
+          :loading="isUploading && imageTypeToUpload === 'cover'"
+          title="Upload Cover Photo"
+        ></v-btn>
+      </div>
       <div class="d-flex justify-space-between align-end px-4" style="margin-top: -64px;">
-        <v-avatar color="white" size="128" class="border">
-          <v-avatar color="primary" size="120">
-              <span class="text-h2 white--text">{{ profile.username.charAt(0).toUpperCase() }}</span>
+        <div class="position-relative">
+          <v-avatar color="white" size="128" class="border">
+             <v-img v-if="profile.avatar_url" :src="profile.avatar_url" :alt="profile.username"></v-img>
+             <v-avatar v-else color="primary" size="120">
+               <span class="text-h2 white--text">{{ profile.username.charAt(0).toUpperCase() }}</span>
+             </v-avatar>
           </v-avatar>
-        </v-avatar>
+          <v-btn
+            v-if="isOwnProfile"
+            icon="mdi-camera"
+            size="small"
+            class="position-absolute"
+            style="bottom: 10px; right: 10px; z-index: 1;"
+            @click="triggerFileUpload('avatar')"
+            :loading="isUploading && imageTypeToUpload === 'avatar'"
+            title="Upload Avatar"
+          ></v-btn>
+        </div>
         
+        
+
         <!-- This is the new Settings Menu -->
         <v-menu v-if="isOwnProfile" location="bottom end">
             <template v-slot:activator="{ props }">
@@ -121,6 +153,21 @@
       </div>
   </v-container>
 
+  <input
+    ref="fileInput"
+    type="file"
+    accept="image/png, image/jpeg, image/gif"
+    hidden
+    @change="handleFileChange"
+  />
+
+  <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="4000">
+    {{ snackbar.text }}
+    <template v-slot:actions>
+        <v-btn variant="text" @click="snackbar.show = false">Close</v-btn>
+    </template>
+  </v-snackbar>
+
   <!-- This is the updated dialog for updating the password -->
     <v-dialog v-model="showUpdatePassword" max-width="500" persistent>
         <v-card>
@@ -180,6 +227,15 @@ const isUpdatingPassword = ref(false);
 const updateError = ref('');
 const updateMessage = ref('');
 
+const fileInput = ref(null);
+const imageTypeToUpload = ref(''); // 'avatar' or 'cover'
+const isUploading = ref(false);
+const snackbar = ref({
+  show: false,
+  text: '',
+  color: 'success',
+});
+
 const groupedSolutions = computed(() => {
     if (!solutions.value || solutions.value.length === 0) return [];
     
@@ -199,7 +255,8 @@ const groupedSolutions = computed(() => {
 
 const fetchData = async (slug) => {
     isLoading.value = true;
-    const { data: profileData } = await supabase.from('users').select('id, username').eq('slug', slug).single();
+    // --- 1. MODIFIED: Fetch avatar_url and cover_url ---
+    const { data: profileData } = await supabase.from('users').select('id, username, avatar_url, cover_url').eq('slug', slug).single();
     
     if (profileData) {
         profile.value = profileData;
@@ -217,6 +274,65 @@ const fetchData = async (slug) => {
     }
     isLoading.value = false;
 };
+
+// --- NEW FUNCTIONS FOR IMAGE UPLOAD ---
+const showSnackbar = (text, color = 'success') => {
+    snackbar.value.text = text;
+    snackbar.value.color = color;
+    snackbar.value.show = true;
+};
+
+const triggerFileUpload = (imageType) => {
+    imageTypeToUpload.value = imageType;
+    // Programmatically click the hidden file input
+    fileInput.value.click();
+};
+
+const handleFileChange = async (event) => {
+    const file = event.target.files[0];
+    if (!file || !user.value) return;
+
+    isUploading.value = true;
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('userId', user.value.id);
+        formData.append('imageType', imageTypeToUpload.value);
+
+        // Invoke the edge function
+        const { data, error } = await supabase.functions.invoke('upload-profile-image', {
+            body: formData,
+        });
+
+        if (error) throw error;
+
+        // Update the user's profile in the database
+        const columnToUpdate = imageTypeToUpload.value === 'avatar' ? 'avatar_url' : 'cover_url';
+        
+        const { error: updateError } = await supabase
+            .from('users')
+            .update({ [columnToUpdate]: data.publicUrl })
+            .eq('id', user.value.id);
+
+        if (updateError) throw updateError;
+        
+        // Update the local profile object to reflect the change immediately
+        if (profile.value) {
+            profile.value[columnToUpdate] = data.publicUrl;
+        }
+
+        showSnackbar(`${imageTypeToUpload.value.charAt(0).toUpperCase() + imageTypeToUpload.value.slice(1)} updated successfully!`);
+
+    } catch (err) {
+        console.error('Upload failed:', err.message);
+        showSnackbar(`Error uploading image: ${err.message}`, 'error');
+    } finally {
+        isUploading.value = false;
+        // Reset the file input so the user can upload the same file again if they wish
+        if(event.target) event.target.value = ''; 
+    }
+};
+// --- END NEW FUNCTIONS ---
 
 const closeUpdatePasswordDialog = () => {
     showUpdatePassword.value = false;

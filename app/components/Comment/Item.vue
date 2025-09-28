@@ -4,7 +4,12 @@
     <div v-if="comment.parent_comment_id" class="connector-line"></div>
     <v-list-item class="pa-0">
       <template v-slot:prepend>
-        <v-avatar color="grey-darken-1" class="mr-4"></v-avatar>
+        <v-avatar v-if="!profile.avatar_url" color="primary" class="mr-4">
+            <span class="text-h6 text-white" v-if="profile.username">{{ profile.username.charAt(0).toUpperCase() }}</span>
+          </v-avatar>
+          <v-avatar size="40" class="mr-4">
+            <v-img :src="profile.avatar_url" :alt="profile.username"></v-img>
+          </v-avatar>
       </template>
 
       <!-- Display Mode vs. Edit Mode -->

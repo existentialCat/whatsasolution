@@ -12,8 +12,11 @@
         <!-- User Info -->
         <div class="d-flex justify-space-between align-center">
             <div>
-                <v-avatar color="grey-lighten-2 mr-1" size="38">
+                <v-avatar v-if="!problem.users?.avatar_url" color="grey-lighten-2 mr-1" size="38">
                   <span class="text-h6" v-if="problem.users?.username">{{ problem.users.username.charAt(0).toUpperCase() }}</span>
+                </v-avatar>
+                <v-avatar v-else="problem.users?.avatar_url" class="mr-1" size="38">
+                  <v-img :src="problem.users?.avatar_url" :alt="profile.username"></v-img>
                 </v-avatar>
                 <NuxtLink :to="`/profile/${problem.users?.slug}`" class="text-decoration-none font-weight-bold">
                     {{ problem.users?.username || 'Anonymous' }}
