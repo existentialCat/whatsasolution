@@ -8,6 +8,17 @@
           <v-alert v-if="submissionError" type="error" dense class="mb-4">
             {{ submissionError }}
           </v-alert>
+          <!-- This is the new section for displaying submission limits -->
+          <v-alert
+            v-if="user && !isExempt"
+            border="start"
+            variant="tonal"
+            density="compact"
+            class="mb-4 text-caption"
+          >
+            You have <strong>{{ problemsRemaining }} of 2</strong> problems remaining today.
+            <div v-if="timeUntilReset">{{ timeUntilReset }}</div>
+          </v-alert>
           <v-text-field
             v-model="problemForm.title"
             label="Title"
