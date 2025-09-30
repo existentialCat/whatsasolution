@@ -69,7 +69,7 @@ defineEmits(['open-submit-dialog']);
   position: fixed !important;
   top: 0;
   left: 0;
-  height: 100vh !important;
+  height: 100dvh !important;
 }
 </style>
 
