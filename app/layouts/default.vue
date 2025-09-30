@@ -5,7 +5,7 @@
       <LayoutAppSidebar @open-submit-dialog="showProblemForm = true" />
     </ClientOnly>
     
-    <v-main class="main-content-area">
+    <v-main>
         <NuxtPage />
       <SubmitProblemDialog v-if="user" v-model="showProblemForm" />
     </v-main>
